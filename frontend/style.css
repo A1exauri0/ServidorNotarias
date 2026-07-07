@@ -1,0 +1,297 @@
+/* Paleta de colores Premium y Variables CSS */
+:root {
+    --color-fondo: #0a0e17;
+    --color-tarjeta: rgba(20, 26, 42, 0.6);
+    --color-tarjeta-borde: rgba(255, 255, 255, 0.05);
+    --color-texto-principal: #f3f4f6;
+    --color-texto-secundario: #9ca3af;
+    
+    --color-primario: #3b82f6;
+    --color-primario-gradiente: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    --color-exito: #10b981;
+    --color-exito-gradiente: linear-gradient(135deg, #10b981, #047857);
+    --color-morado: #8b5cf6;
+    --color-morado-gradiente: linear-gradient(135deg, #8b5cf6, #6d28d9);
+    
+    --tipografia-titulos: 'Outfit', sans-serif;
+    --tipografia-cuerpo: 'Inter', sans-serif;
+    
+    --efecto-vidrio: blur(16px);
+}
+
+/* Reinicio de estilos básicos */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: var(--color-fondo);
+    color: var(--color-texto-principal);
+    font-family: var(--tipografia-cuerpo);
+    overflow: hidden;
+}
+
+/* Contenedor principal Grid */
+.contenedor-app {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+/* Estilos de la barra lateral (Sidebar) */
+.barra-lateral {
+    width: 280px;
+    background-color: rgba(13, 18, 30, 0.95);
+    border-right: 1px solid var(--color-tarjeta-borde);
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+}
+
+.logo-seccion {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 40px;
+}
+
+.icono-logo {
+    font-size: 28px;
+}
+
+.logo-seccion h2 {
+    font-family: var(--tipografia-titulos);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.menu-navegacion {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-grow: 1;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: transparent;
+    border: none;
+    color: var(--color-texto-secundario);
+    font-family: var(--tipografia-titulos);
+    font-size: 15px;
+    font-weight: 500;
+    border-radius: 12px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.nav-item:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+    color: var(--color-texto-principal);
+    transform: translateX(4px);
+}
+
+.nav-item.activo {
+    background: var(--color-primario-gradiente);
+    color: #fff;
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+}
+
+.info-servidor {
+    padding-top: 20px;
+    border-top: 1px solid var(--color-tarjeta-borde);
+}
+
+.servidor-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--color-texto-secundario);
+}
+
+.indicador {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.indicador.activo {
+    background-color: var(--color-exito);
+    box-shadow: 0 0 10px var(--color-exito);
+}
+
+/* Contenido Principal */
+.contenido-principal {
+    flex-grow: 1;
+    padding: 40px;
+    overflow-y: auto;
+    background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.05), transparent 60%);
+}
+
+/* Encabezado */
+.encabezado {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 35px;
+}
+
+.titulo-pagina h1 {
+    font-family: var(--tipografia-titulos);
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.titulo-pagina p {
+    color: var(--color-texto-secundario);
+    font-size: 14px;
+}
+
+/* Filtros de Fecha */
+.filtros-fecha {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    background-color: var(--color-tarjeta);
+    border: 1px solid var(--color-tarjeta-borde);
+    padding: 8px 18px;
+    border-radius: 16px;
+    backdrop-filter: var(--efecto-vidrio);
+}
+
+.campo-fecha {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.campo-fecha label {
+    font-size: 13px;
+    color: var(--color-texto-secundario);
+}
+
+.campo-fecha input {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--color-tarjeta-borde);
+    border-radius: 8px;
+    padding: 6px 10px;
+    color: #fff;
+    font-family: var(--tipografia-cuerpo);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.campo-fecha input:focus {
+    border-color: var(--color-primario);
+}
+
+.btn-filtrar {
+    background: var(--color-primario-gradiente);
+    border: none;
+    color: #fff;
+    font-family: var(--tipografia-titulos);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-filtrar:hover {
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+    transform: translateY(-1px);
+}
+
+/* Grid de KPIs */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-bottom: 40px;
+}
+
+.kpi-card {
+    background-color: var(--color-tarjeta);
+    border: 1px solid var(--color-tarjeta-borde);
+    border-radius: 20px;
+    padding: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    backdrop-filter: var(--efecto-vidrio);
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.kpi-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.kpi-info h3 {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-texto-secundario);
+    margin-bottom: 8px;
+}
+
+.kpi-valor {
+    font-family: var(--tipografia-titulos);
+    font-size: 32px;
+    font-weight: 700;
+}
+
+.kpi-icono {
+    font-size: 36px;
+    opacity: 0.8;
+}
+
+/* Colores dinámicos en KPIs */
+.kpi-card.azul:hover {
+    border-color: rgba(59, 130, 246, 0.3);
+}
+.kpi-card.verde:hover {
+    border-color: rgba(10, 185, 129, 0.3);
+}
+.kpi-card.morado:hover {
+    border-color: rgba(139, 92, 246, 0.3);
+}
+
+/* Sección de Gráficas */
+.seccion-graficas {
+    display: grid;
+    grid-template-columns: 2fr 1.2fr;
+    gap: 24px;
+}
+
+.grafica-box {
+    background-color: var(--color-tarjeta);
+    border: 1px solid var(--color-tarjeta-borde);
+    border-radius: 20px;
+    padding: 24px;
+    backdrop-filter: var(--efecto-vidrio);
+}
+
+.grafica-box h3 {
+    font-family: var(--tipografia-titulos);
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    color: var(--color-texto-principal);
+}
+
+.canvas-container {
+    position: relative;
+    height: 350px;
+    width: 100%;
+}

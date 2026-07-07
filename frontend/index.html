@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Servidor de Auditoría y Panel Administrativo</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- CSS Estilos -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor-app">
+        <!-- Barra Lateral (Sidebar) -->
+        <aside class="barra-lateral">
+            <div class="logo-seccion">
+                <span class="icono-logo">📊</span>
+                <h2>Auditoría Local</h2>
+            </div>
+            
+            <nav class="menu-navegacion">
+                <button class="nav-item activo" data-tab="dashboard">
+                    <span class="icono-menu">📈</span> Dashboard
+                </button>
+                <button class="nav-item" data-tab="registros">
+                    <span class="icono-menu">📝</span> Ver Registros
+                </button>
+            </nav>
+
+            <div class="info-servidor">
+                <div class="servidor-status">
+                    <span class="indicador activo"></span>
+                    <span class="texto-status">Servidor Activo (Puerto 3000)</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Contenido Principal -->
+        <main class="contenido-principal">
+            <!-- Header -->
+            <header class="encabezado">
+                <div class="titulo-pagina">
+                    <h1>Resumen de Productividad</h1>
+                    <p>Monitoreo y KPIs locales en tiempo real</p>
+                </div>
+
+                <!-- Filtro de Fechas -->
+                <div class="filtros-fecha">
+                    <div class="campo-fecha">
+                        <label for="fechaInicio">Inicio:</label>
+                        <input type="date" id="fechaInicio">
+                    </div>
+                    <div class="campo-fecha">
+                        <label for="fechaFin">Fin:</label>
+                        <input type="date" id="fechaFin">
+                    </div>
+                    <button id="btnFiltrar" class="btn-filtrar">🔍 Aplicar</button>
+                </div>
+            </header>
+
+            <!-- Grid de KPIs -->
+            <section class="kpi-grid">
+                <div class="kpi-card azul">
+                    <div class="kpi-info">
+                        <h3>PDFs Procesados</h3>
+                        <span class="kpi-valor" id="txtTotalPdfs">0</span>
+                    </div>
+                    <span class="kpi-icono">📄</span>
+                </div>
+
+                <div class="kpi-card verde">
+                    <div class="kpi-info">
+                        <h3>Imágenes/Páginas</h3>
+                        <span class="kpi-valor" id="txtTotalImagenes">0</span>
+                    </div>
+                    <span class="kpi-icono">🖼️</span>
+                </div>
+
+                <div class="kpi-card morado">
+                    <div class="kpi-info">
+                        <h3>Notarías Activas</h3>
+                        <span class="kpi-valor" id="txtTotalNotarias">0</span>
+                    </div>
+                    <span class="kpi-icono">📍</span>
+                </div>
+            </section>
+
+            <!-- Sección de Gráficas -->
+            <section class="seccion-graficas">
+                <div class="grafica-box">
+                    <h3>Productividad por Notaría</h3>
+                    <div class="canvas-container">
+                        <canvas id="graficaBarras"></canvas>
+                    </div>
+                </div>
+
+                <div class="grafica-box">
+                    <h3>Distribución de Capturas</h3>
+                    <div class="canvas-container">
+                        <canvas id="graficaPastel"></canvas>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- JS de la App -->
+    <script src="app.js"></script>
+</body>
+</html>

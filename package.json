@@ -1,0 +1,29 @@
+{
+  "name": "servidor-notarias",
+  "version": "1.0.0",
+  "description": "Servidor local y panel de administración en Electron y Express para auditorías de capturas",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js"
+  },
+  "keywords": [
+    "electron",
+    "express",
+    "mysql",
+    "auditoria"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "multer": "^2.2.0",
+    "mysql2": "^3.22.6",
+    "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "electron": "^43.1.0"
+  }
+}

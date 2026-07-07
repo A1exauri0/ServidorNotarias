@@ -1,0 +1,22 @@
+# Dependencias de paquetes
+node_modules/
+.pnpm-store/
+
+# Archivos de entorno local con credenciales sensibles
+.env
+.env.local
+.env.production
+
+# Archivos de depuracion y logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Salidas de compilacion y empaquetado de Electron
+dist/
+release/
+
+# Archivos temporales del sistema operativo
+.DS_Store
+Thumbs.db
