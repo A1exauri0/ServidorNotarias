@@ -1,5 +1,5 @@
 # Dependencias de paquetes
-node_modules/
+*node_modules/
 .pnpm-store/
 
 # Archivos de entorno local con credenciales sensibles
