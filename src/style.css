@@ -600,3 +600,140 @@ body.tema-claro .tabla-plana tbody tr:hover {
 .seccion-graficas.vertical .grafica-box {
     width: 100%;
 }
+
+/* Modales y Formularios Premium de Usuarios */
+.modal-superpuesto {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(10, 10, 12, 0.65);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    animation: fadeInModal 0.25s ease-out;
+}
+
+.modal-contenido {
+    background-color: var(--color-tarjeta);
+    border: 1px solid var(--color-tarjeta-borde);
+    border-radius: 16px;
+    width: 440px;
+    max-width: 90%;
+    padding: 24px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.35);
+    animation: slideUpModal 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-cabecera {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--color-tarjeta-borde);
+    padding-bottom: 12px;
+}
+
+.modal-cabecera h3 {
+    margin: 0;
+    font-family: var(--tipografia-titulos);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-texto-principal);
+}
+
+.btn-cerrar-modal {
+    background: transparent;
+    border: none;
+    color: var(--color-texto-secundario);
+    cursor: pointer;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 50%;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.btn-cerrar-modal:hover {
+    background-color: var(--color-tarjeta-borde);
+    color: var(--color-texto-principal);
+}
+
+/* Campos de Formulario */
+.campo-formulario {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 15px;
+}
+
+.campo-formulario label {
+    font-family: var(--tipografia-titulos);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-texto-secundario);
+}
+
+.campo-formulario input {
+    background-color: var(--color-fondo);
+    border: 1px solid var(--color-tarjeta-borde);
+    color: var(--color-texto-principal);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-family: var(--tipografia-cuerpo);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.campo-formulario input:focus {
+    border-color: var(--color-primario);
+    box-shadow: 0 0 0 3px rgba(58, 106, 201, 0.15);
+}
+
+/* Botones de acción dentro de la tabla */
+.btn-accion-tabla {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 6px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.btn-accion-tabla.editar {
+    color: var(--color-primario);
+}
+
+.btn-accion-tabla.editar:hover {
+    background-color: rgba(58, 106, 201, 0.12);
+}
+
+.btn-accion-tabla.eliminar {
+    color: #eb5584;
+}
+
+.btn-accion-tabla.eliminar:hover {
+    background-color: rgba(235, 85, 132, 0.12);
+}
+
+/* Animaciones */
+@keyframes fadeInModal {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUpModal {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+

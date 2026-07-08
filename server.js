@@ -7,12 +7,16 @@ const path = require('path');
 const fs = require('fs');
 const { PDFDocument } = require('pdf-lib');
 
+const controladorUsuarios = require('./controllers/usuarios.controller');
+const rutasUsuarios = require('./routes/usuarios.routes');
+
 const app = express();
 const puerto = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+app.use('/api/usuarios', rutasUsuarios);
 
 // Configuración de almacenamiento físico de PDFs con multer
 const almacenamiento = multer.diskStorage({
@@ -69,8 +73,9 @@ async function inicializarBaseDatos() {
         });
 
         await crearTablaUnica();
+        await controladorUsuarios.inicializarTablasUsuarios(pool);
 
-        console.log(`Base de datos y tabla única 'auditoria' inicializada en MySQL [${dbNombre}].`);
+        console.log(`Base de datos, tabla única 'auditoria' y tabla 'usuarios' inicializadas en MySQL [${dbNombre}].`);
     } catch (error) {
         console.error('Error al inicializar la base de datos MySQL:', error);
     }
