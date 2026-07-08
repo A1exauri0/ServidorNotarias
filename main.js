@@ -2,7 +2,7 @@ const { app, BrowserWindow } = require('electron');
 const path = require('path');
 
 // Levantar el servidor de fondo Express de forma interna en el mismo proceso
-require('./server.js');
+require('./backend/server.js');
 
 function crearVentana() {
     const ventana = new BrowserWindow({
@@ -10,7 +10,7 @@ function crearVentana() {
         height: 850,
         minWidth: 1024,
         minHeight: 720,
-        icon: path.join(__dirname, 'src', 'assets', 'icono.png'),
+        icon: path.join(__dirname, 'frontend', 'public', 'assets', 'icono.png'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true
@@ -22,7 +22,7 @@ function crearVentana() {
     ventana.setMenuBarVisibility(false);
 
     // Cargar el archivo principal de la interfaz de administración
-    ventana.loadFile(path.join(__dirname, 'src', 'index.html'));
+    ventana.loadFile(path.join(__dirname, 'frontend', 'public', 'index.html'));
 }
 
 app.whenReady().then(() => {

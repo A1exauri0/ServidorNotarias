@@ -59,7 +59,7 @@ document.addEventListener("DOMContentLoaded", () => {
 async function cargarVista(nombreVista) {
   vistaActual = nombreVista;
   try {
-    const respuesta = await fetch(`views/${nombreVista}.html`);
+    const respuesta = await fetch(`../src/views/${nombreVista}.html`);
     if (!respuesta.ok) throw new Error("No se pudo cargar la vista");
     const html = await respuesta.text();
     document.getElementById("contenido-vista").innerHTML = html;
