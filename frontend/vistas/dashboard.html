@@ -1,0 +1,46 @@
+<!-- Vista de Dashboard (Gráficas y KPIs) -->
+<div id="vista-dashboard-wrapper">
+    <!-- Grid de KPIs -->
+    <section class="kpi-grid">
+        <div class="kpi-card azul">
+            <div class="kpi-info">
+                <h3>PDFs Digitalizados</h3>
+                <span class="kpi-valor" id="txtTotalPdfs">0</span>
+            </div>
+            <iconify-icon icon="mdi:file-pdf-box" class="kpi-icono"></iconify-icon>
+        </div>
+
+        <div class="kpi-card verde">
+            <div class="kpi-info">
+                <h3>Imágenes/Páginas Digitalizadas</h3>
+                <span class="kpi-valor" id="txtTotalImagenes">0</span>
+            </div>
+            <iconify-icon icon="mdi:image-outline" class="kpi-icono"></iconify-icon>
+        </div>
+
+        <div class="kpi-card morado">
+            <div class="kpi-info">
+                <h3>Notarías</h3>
+                <span class="kpi-valor" id="txtTotalNotarias">0</span>
+            </div>
+            <iconify-icon icon="mdi:map-marker-outline" class="kpi-icono"></iconify-icon>
+        </div>
+    </section>
+
+    <!-- Grid de Gráficas Verticales (Una arriba de la otra) -->
+    <section class="seccion-graficas vertical">
+        <div class="grafica-box">
+            <h3>Archivos PDFs Procesados por Notaría</h3>
+            <div class="canvas-container">
+                <canvas id="graficaBarrasPdfs"></canvas>
+            </div>
+        </div>
+
+        <div class="grafica-box" style="margin-top: 10px;">
+            <h3>Páginas / Imágenes Capturadas por Notaría (Vista Horizontal)</h3>
+            <div class="canvas-container" style="height: 380px;">
+                <canvas id="graficaBarrasPaginas"></canvas>
+            </div>
+        </div>
+    </section>
+</div>

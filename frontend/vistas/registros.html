@@ -1,0 +1,48 @@
+<!-- Vista de Ver Registros -->
+<div id="vista-registros-wrapper">
+    <div class="tabla-contenedor">
+        <div class="tabla-cabecera">
+            <h3>Últimos 100 Registros Procesados</h3>
+            
+            <!-- Barra de Filtros Dinámicos -->
+            <div class="filtros-tabla-caja">
+                <!-- Buscador de texto -->
+                <div class="buscador-caja">
+                    <iconify-icon icon="mdi:magnify" class="buscador-icono"></iconify-icon>
+                    <input type="text" id="buscadorRegistros" placeholder="Buscar archivo o PC...">
+                </div>
+
+                <!-- Dropdowns Personalizados -->
+                <select id="filtroUsuario" class="filtro-select">
+                    <option value="">Todos los Usuarios</option>
+                </select>
+                <select id="filtroNotaria" class="filtro-select">
+                    <option value="">Todas las Notarías</option>
+                </select>
+                <select id="filtroVolumen" class="filtro-select">
+                    <option value="">Todos los Volúmenes</option>
+                </select>
+            </div>
+        </div>
+        <div class="tabla-scroll">
+            <table class="tabla-plana">
+                <thead>
+                    <tr>
+                        <th style="width: 80px; text-align: center;">Exportado</th>
+                        <th>Usuario</th>
+                        <th>Turno</th>
+                        <th>PC</th>
+                        <th>Notaría</th>
+                        <th>Volumen</th>
+                        <th>Archivo</th>
+                        <th style="width: 80px; text-align: center;">Páginas</th>
+                        <th style="text-align: right;">Fecha y Hora</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaRegistrosBody">
+                    <!-- Registros cargados dinámicamente -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

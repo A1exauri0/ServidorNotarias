@@ -27,7 +27,7 @@ const almacenamiento = multer.diskStorage({
         const rutaBase = process.env.RUTA_SSDIREC || 'C:\\laragon\\www\\ssdirec';
         const rutaDestino = path.join(rutaBase, tipoCaptura, notaria);
 
-        // Crear la carpeta física de destino si no existe
+        // Crear la carpeta física si no existe
         if (!fs.existsSync(rutaDestino)) {
             fs.mkdirSync(rutaDestino, { recursive: true });
         }
@@ -35,7 +35,6 @@ const almacenamiento = multer.diskStorage({
         callback(null, rutaDestino);
     },
     filename: (req, archivo, callback) => {
-        // Conservar el nombre original del archivo PDF
         callback(null, archivo.originalname);
     }
 });
@@ -44,10 +43,9 @@ const upload = multer({ storage: almacenamiento });
 
 let pool;
 
-// Inicialización de conexión a MySQL y creación de base de datos / tablas
+// Inicialización de conexión a MySQL
 async function inicializarBaseDatos() {
     try {
-        // Conexión inicial sin especificar base de datos para poder crearla si no existe
         const conexionInicial = await mysql.createConnection({
             host: process.env.DB_HOST || '127.0.0.1',
             port: process.env.DB_PORT || 3306,
@@ -59,7 +57,6 @@ async function inicializarBaseDatos() {
         await conexionInicial.query(`CREATE DATABASE IF NOT EXISTS \`${dbNombre}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
         await conexionInicial.end();
 
-        // Conectar pool a la base de datos ya creada
         pool = mysql.createPool({
             host: process.env.DB_HOST || '127.0.0.1',
             port: process.env.DB_PORT || 3306,
@@ -71,84 +68,43 @@ async function inicializarBaseDatos() {
             queueLimit: 0
         });
 
-        // Crear tablas necesarias
-        await crearTablas();
+        await crearTablaUnica();
 
-        console.log(`Base de datos y tablas inicializadas correctamente en MySQL [${dbNombre}].`);
+        console.log(`Base de datos y tabla única 'auditoria' inicializada en MySQL [${dbNombre}].`);
     } catch (error) {
         console.error('Error al inicializar la base de datos MySQL:', error);
     }
 }
 
-async function crearTablas() {
+// Crear la tabla única de auditoría (idéntica a AuditoriaDigitalizacion.php)
+async function crearTablaUnica() {
     const conexion = await pool.getConnection();
     try {
-        // 1. Tabla auditoria_notarias
         await conexion.query(`
-            CREATE TABLE IF NOT EXISTS \`auditoria_notarias\` (
+             CREATE TABLE IF NOT EXISTS \`auditoria\` (
                 \`id\` bigint(20) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                 \`fecha_hora\` datetime NOT NULL,
                 \`turno\` varchar(255) DEFAULT NULL,
-                \`user_id\` bigint(20) DEFAULT NULL,
-                \`categoria\` varchar(255) DEFAULT NULL,
-                \`pc\` varchar(255) DEFAULT NULL,
-                \`directorio\` varchar(255) DEFAULT NULL,
-                \`volumen\` varchar(255) DEFAULT NULL,
-                \`accion\` varchar(255) DEFAULT NULL,
-                \`archivo_original\` varchar(255) DEFAULT NULL,
-                \`archivo_nuevo\` varchar(255) DEFAULT NULL,
-                \`ruta\` varchar(500) DEFAULT NULL,
-                \`detalles\` text DEFAULT NULL,
-                \`paginas\` int(11) DEFAULT 0,
-                \`exportado\` tinyint(4) DEFAULT 0,
-                \`exportado_en\` datetime DEFAULT NULL,
-                \`created_at\` datetime DEFAULT NULL,
-                \`updated_at\` datetime DEFAULT NULL
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-        `);
-
-        // 2. Tabla auditoria_digitalizacion
-        await conexion.query(`
-            CREATE TABLE IF NOT EXISTS \`auditoria_digitalizacion\` (
-                \`id\` bigint(20) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                \`fecha_hora\` datetime NOT NULL,
-                \`turno\` varchar(255) DEFAULT NULL,
-                \`user_id\` bigint(20) DEFAULT NULL,
+                \`usuario\` varchar(255) DEFAULT NULL,
                 \`pc\` varchar(255) DEFAULT NULL,
                 \`ip\` varchar(255) DEFAULT NULL,
                 \`notaria\` varchar(255) DEFAULT NULL,
+                \`volumen\` varchar(255) DEFAULT NULL,
                 \`archivo\` varchar(255) DEFAULT NULL,
                 \`detalles\` text DEFAULT NULL,
                 \`paginas\` int(11) DEFAULT 0,
+                \`exportado\` tinyint(4) DEFAULT 0,
+                \`exportado_en\` datetime DEFAULT NULL,
                 \`lugar_trabajo\` varchar(255) DEFAULT NULL,
-                \`exportado\` tinyint(4) DEFAULT 0,
-                \`exportado_en\` datetime DEFAULT NULL,
                 \`created_at\` datetime DEFAULT NULL,
                 \`updated_at\` datetime DEFAULT NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
 
-        // 3. Tabla auditoria_libros
+        // Crear índice compuesto para búsquedas ultra rápidas de duplicados en la migración
         await conexion.query(`
-            CREATE TABLE IF NOT EXISTS \`auditoria_libros\` (
-                \`id\` bigint(20) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                \`user_id\` bigint(20) DEFAULT NULL,
-                \`turno\` varchar(255) DEFAULT NULL,
-                \`categoria\` varchar(255) DEFAULT NULL,
-                \`pc\` varchar(255) DEFAULT NULL,
-                \`directorio\` varchar(500) DEFAULT NULL,
-                \`accion\` varchar(255) DEFAULT NULL,
-                \`archivo_original\` varchar(255) DEFAULT NULL,
-                \`archivo_nuevo\` varchar(255) DEFAULT NULL,
-                \`detalles\` text DEFAULT NULL,
-                \`paginas\` int(11) DEFAULT 0,
-                \`exportado\` tinyint(4) DEFAULT 0,
-                \`exportado_en\` datetime DEFAULT NULL,
-                \`created_at\` datetime DEFAULT NULL,
-                \`updated_at\` datetime DEFAULT NULL
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            CREATE INDEX IF NOT EXISTS \`idx_auditoria_busqueda\` ON \`auditoria\` (\`fecha_hora\`, \`pc\`, \`archivo\`);
         `);
-
     } finally {
         conexion.release();
     }
@@ -162,7 +118,6 @@ async function contarPaginasPdf(rutaCompleta) {
         const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
         return pdfDoc.getPageCount();
     } catch (e) {
-        // Fallback rápido por regex en caso de error de lectura binaria
         try {
             const stream = fs.readFileSync(rutaCompleta);
             const content = stream.toString('ascii', 0, 102400); // Primeros 100KB
@@ -175,7 +130,7 @@ async function contarPaginasPdf(rutaCompleta) {
     }
 }
 
-// Manejador común para registrar auditorías
+// Manejador común para registrar auditorías en la tabla única
 async function registrarAuditoriaHandler(req, res) {
     const datos = req.body;
     let registros = [];
@@ -197,113 +152,57 @@ async function registrarAuditoriaHandler(req, res) {
     try {
         for (const [index, reg] of registros.entries()) {
             try {
-                // Determinar tipo de captura e inferir la tabla correspondiente
-                let tipo = (reg.TipoCaptura || reg.tipo_captura || 'DIGITALIZACION').toUpperCase();
-                
-                // Mapeo dinámico de tablas
-                let tabla = 'auditoria_digitalizacion';
-                if (tipo === 'NOTARIAS' || req.originalUrl.includes('/notarias/')) {
-                    tabla = 'auditoria_notarias';
-                    tipo = 'NOTARIAS';
-                } else if (tipo === 'LIBROS' || req.originalUrl.includes('/libros/')) {
-                    tabla = 'auditoria_libros';
-                    tipo = 'LIBROS';
-                }
-
                 const fechaHora = reg.FechaHora || reg.fecha_hora || new Date().toISOString().slice(0, 19).replace('T', ' ');
-                const archivoOriginal = reg.ArchivoOriginal || reg.archivo_original || reg.archivo || null;
+                const archivo = reg.ArchivoOriginal || reg.archivo_original || reg.archivo || null;
                 const pc = reg.PC || reg.pc || null;
-                const accion = reg.Accion || reg.accion || 'Capturado';
 
-                // Prevenir duplicados en MySQL
-                let queryDuplicado = '';
-                let paramsDuplicado = [];
-                if (tabla === 'auditoria_digitalizacion') {
-                    queryDuplicado = `SELECT id FROM \`${tabla}\` WHERE fecha_hora = ? AND pc = ? AND archivo = ? LIMIT 1`;
-                    paramsDuplicado = [fechaHora, pc, archivoOriginal];
-                } else {
-                    queryDuplicado = `SELECT id FROM \`${tabla}\` WHERE fecha_hora = ? AND pc = ? AND archivo_original = ? AND accion = ? LIMIT 1`;
-                    paramsDuplicado = [fechaHora, pc, archivoOriginal, accion];
-                }
+                // Validar duplicados contra la tabla única
+                const [rows] = await conexion.query(
+                    'SELECT id FROM `auditoria` WHERE fecha_hora = ? AND pc = ? AND archivo = ? LIMIT 1',
+                    [fechaHora, pc, archivo]
+                );
 
-                const [rows] = await conexion.query(queryDuplicado, paramsDuplicado);
                 if (rows.length > 0) {
                     duplicados++;
                     continue;
                 }
 
-                // Armar la consulta de inserción dinámica según la tabla
                 const ahora = new Date();
-                let sqlInsert = '';
-                let paramsInsert = [];
+                const sqlInsert = `
+                    INSERT INTO \`auditoria\` 
+                    (fecha_hora, turno, usuario, pc, ip, notaria, volumen, archivo, detalles, paginas, exportado, exportado_en, lugar_trabajo, created_at, updated_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+                `;
 
-                if (tabla === 'auditoria_digitalizacion') {
-                    sqlInsert = `
-                        INSERT INTO \`auditoria_digitalizacion\` 
-                        (fecha_hora, turno, user_id, pc, ip, notaria, archivo, detalles, paginas, lugar_trabajo, exportado, exportado_en, created_at, updated_at) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-                    `;
-                    paramsInsert = [
-                        fechaHora,
-                        reg.Turno || reg.turno || null,
-                        reg.UserId || reg.user_id || null,
-                        pc,
-                        reg.IP || reg.ip || null,
-                        reg.Notaria || reg.notaria || 'General',
-                        archivoOriginal,
-                        reg.Detalles || reg.detalles || null,
-                        reg.Paginas || reg.paginas || 0,
-                        reg.LugarTrabajo || reg.lugar_trabajo || null,
-                        ahora,
-                        ahora,
-                        ahora
-                    ];
-                } else if (tabla === 'auditoria_notarias') {
-                    sqlInsert = `
-                        INSERT INTO \`auditoria_notarias\` 
-                        (fecha_hora, turno, user_id, categoria, pc, directorio, volumen, accion, archivo_original, archivo_nuevo, ruta, detalles, paginas, exportado, exportado_en, created_at, updated_at) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-                    `;
-                    paramsInsert = [
-                        fechaHora,
-                        reg.Turno || reg.turno || null,
-                        reg.UserId || reg.user_id || null,
-                        reg.Categoria || reg.categoria || null,
-                        pc,
-                        reg.Notaria || reg.notaria || reg.directorio || 'General',
-                        reg.Lote || reg.lote || reg.volumen || null,
-                        accion,
-                        archivoOriginal,
-                        reg.ArchivoNuevo || reg.archivo_nuevo || null,
-                        reg.RutaLocal || reg.ruta_local || reg.ruta || null,
-                        reg.Detalles || reg.detalles || null,
-                        reg.Paginas || reg.paginas || 0,
-                        ahora,
-                        ahora,
-                        ahora
-                    ];
-                } else if (tabla === 'auditoria_libros') {
-                    sqlInsert = `
-                        INSERT INTO \`auditoria_libros\` 
-                        (user_id, turno, categoria, pc, directorio, accion, archivo_original, archivo_nuevo, detalles, paginas, exportado, exportado_en, created_at, updated_at) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-                    `;
-                    paramsInsert = [
-                        reg.UserId || reg.user_id || null,
-                        reg.Turno || reg.turno || null,
-                        reg.Categoria || reg.categoria || null,
-                        pc,
-                        reg.Notaria || reg.notaria || reg.directorio || 'General',
-                        accion,
-                        archivoOriginal,
-                        reg.ArchivoNuevo || reg.archivo_nuevo || null,
-                        reg.Detalles || reg.detalles || null,
-                        reg.Paginas || reg.paginas || 0,
-                        ahora,
-                        ahora,
-                        ahora
-                    ];
+                // Resolver nombres de variables adaptables desde el cliente C#
+                let notariaResolv = reg.Notaria || reg.notaria || reg.directorio || 'General';
+                let volumenResolv = reg.Lote || reg.lote || reg.volumen || null;
+
+                // Separar de forma inteligente si viene en formato "NOTARIA XX\VOLUMEN YY"
+                if (typeof notariaResolv === 'string' && notariaResolv.includes('\\')) {
+                    const partes = notariaResolv.split('\\');
+                    notariaResolv = partes[0].trim();
+                    if (!volumenResolv) {
+                        volumenResolv = partes[1].trim();
+                    }
                 }
+
+                const paramsInsert = [
+                    fechaHora,
+                    reg.Turno || reg.turno || null,
+                    reg.Usuario || reg.usuario || null,
+                    pc,
+                    reg.IP || reg.ip || null,
+                    notariaResolv,
+                    volumenResolv,
+                    archivo,
+                    reg.Detalles || reg.detalles || null,
+                    reg.Paginas || reg.paginas || 0,
+                    ahora,
+                    reg.LugarTrabajo || reg.lugar_trabajo || null,
+                    ahora,
+                    ahora
+                ];
 
                 await conexion.query(sqlInsert, paramsInsert);
                 procesados++;
@@ -327,7 +226,7 @@ async function registrarAuditoriaHandler(req, res) {
     }
 }
 
-// Definición de endpoints de API para soportar cualquier URL configurada en C#
+// Rutas de API para soportar compatibilidad
 app.post('/api/registrar', registrarAuditoriaHandler);
 app.post('/api/digitalizacion/registrar', registrarAuditoriaHandler);
 app.post('/api/notarias/registrar', registrarAuditoriaHandler);
@@ -347,7 +246,6 @@ app.post([
             return res.status(400).json({ ok: false, mensaje: 'No se recibió ningún archivo PDF.' });
         }
 
-        const tipoCaptura = (req.body.tipo_captura || 'DIGITALIZACION').toUpperCase();
         let notaria = (req.body.notaria || 'General').trim();
         const archivoOriginal = req.file.originalname;
         const rutaCompleta = req.file.path;
@@ -356,39 +254,14 @@ app.post([
             notaria = 'General';
         }
 
-        // 1. Contar páginas del PDF físicamente en el servidor
         const paginasFisicas = await contarPaginasPdf(rutaCompleta);
-
-        // 2. Determinar la tabla adecuada
-        let tabla = 'auditoria_digitalizacion';
-        if (tipoCaptura === 'NOTARIAS' || req.originalUrl.includes('/notarias/')) {
-            tabla = 'auditoria_notarias';
-        } else if (tipoCaptura === 'LIBROS' || req.originalUrl.includes('/libros/')) {
-            tabla = 'auditoria_libros';
-        }
-
-        // 3. Actualizar base de datos
-        let queryUpdate = '';
-        let paramsUpdate = [];
         const ahora = new Date();
 
-        if (tabla === 'auditoria_digitalizacion') {
-            queryUpdate = `
-                UPDATE \`auditoria_digitalizacion\` 
-                SET exportado = 1, exportado_en = ?, paginas = CASE WHEN ? > 0 THEN ? ELSE paginas END 
-                WHERE archivo = ? AND notaria LIKE ?
-            `;
-            paramsUpdate = [ahora, paginasFisicas, paginasFisicas, archivoOriginal, `%${notaria}%`];
-        } else {
-            queryUpdate = `
-                UPDATE \`${tabla}\` 
-                SET exportado = 1, exportado_en = ?, paginas = CASE WHEN ? > 0 THEN ? ELSE paginas END 
-                WHERE archivo_original = ? AND directorio LIKE ?
-            `;
-            paramsUpdate = [ahora, paginasFisicas, paginasFisicas, archivoOriginal, `%${notaria}%`];
-        }
-
-        await pool.query(queryUpdate, paramsUpdate);
+        // Actualizar tabla única
+        await pool.query(
+            'UPDATE `auditoria` SET exportado = 1, exportado_en = ?, paginas = CASE WHEN ? > 0 THEN ? ELSE paginas END WHERE archivo = ? AND notaria LIKE ?',
+            [ahora, paginasFisicas, paginasFisicas, archivoOriginal, `%${notaria}%`]
+        );
 
         res.json({
             ok: true,
@@ -401,7 +274,7 @@ app.post([
     }
 });
 
-// Endpoint para el Dashboard (consultas de productividad y estadísticas de Electron)
+// Endpoint para el Dashboard
 app.get('/api/estadisticas/productividad', async (req, res) => {
     try {
         const { fecha_inicio, fecha_fin } = req.query;
@@ -409,38 +282,41 @@ app.get('/api/estadisticas/productividad', async (req, res) => {
             return res.status(400).json({ ok: false, mensaje: 'Debe especificar fecha_inicio y fecha_fin (formato yyyy-mm-dd).' });
         }
 
-        const [notariasData] = await pool.query(`
-            SELECT 
-                DATE(fecha_hora) as fecha,
-                COALESCE(directorio, 'General') as notaria,
-                COUNT(*) as total_pdfs,
-                SUM(paginas) as total_imagenes
-            FROM \`auditoria_notarias\`
-            WHERE DATE(fecha_hora) BETWEEN ? AND ?
-            GROUP BY DATE(fecha_hora), directorio
-            ORDER BY fecha ASC, total_pdfs DESC
-        `, [fecha_inicio, fecha_fin]);
-
-        const [digitalizacionData] = await pool.query(`
+        const [productividadData] = await pool.query(`
             SELECT 
                 DATE(fecha_hora) as fecha,
                 COALESCE(notaria, 'General') as notaria,
+                COALESCE(volumen, 'Sin Lote') as volumen,
                 COUNT(*) as total_pdfs,
                 SUM(paginas) as total_imagenes
-            FROM \`auditoria_digitalizacion\`
+            FROM \`auditoria\`
             WHERE DATE(fecha_hora) BETWEEN ? AND ?
-            GROUP BY DATE(fecha_hora), notaria
+            GROUP BY DATE(fecha_hora), notaria, volumen
             ORDER BY fecha ASC, total_pdfs DESC
         `, [fecha_inicio, fecha_fin]);
 
         res.json({
             ok: true,
-            notarias: notariasData,
-            digitalizacion: digitalizacionData
+            notarias: productividadData,
+            digitalizacion: [] // Retornar vacío para compatibilidad con la llamada actual del frontend
         });
 
     } catch (error) {
         res.status(500).json({ ok: false, mensaje: 'Error al consultar estadísticas: ' + error.message });
+    }
+});
+
+// Endpoint para consultar los últimos 100 registros en la tabla única
+app.get('/api/registros', async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT id, fecha_hora, turno, pc, notaria, volumen, archivo, paginas, exportado 
+            FROM \`auditoria\`
+            ORDER BY fecha_hora DESC LIMIT 100
+        `);
+        res.json({ ok: true, registros: rows });
+    } catch (error) {
+        res.status(500).json({ ok: false, mensaje: 'Error al consultar registros: ' + error.message });
     }
 });
 

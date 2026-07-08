@@ -10,6 +10,7 @@ function crearVentana() {
         height: 850,
         minWidth: 1024,
         minHeight: 720,
+        icon: path.join(__dirname, 'frontend', 'assets', 'icono.png'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true
