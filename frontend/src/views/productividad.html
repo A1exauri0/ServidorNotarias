@@ -1,0 +1,45 @@
+<!-- Vista de Reporte de Productividad estilo Excel -->
+<div id="vista-productividad-wrapper">
+    <div class="tabla-contenedor">
+        <div class="tabla-cabecera" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 20px;">
+            <div>
+                <h3>Reporte de Productividad Diaria</h3>
+                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--color-texto-secundario);">Muestra el rendimiento consolidado por capturista y fecha</p>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <!-- Rango de fechas -->
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <label for="prodFechaInicio" style="font-size: 12px; font-weight: 600; color: var(--color-texto-secundario);">Desde:</label>
+                    <input type="date" id="prodFechaInicio" class="filtro-select" style="height: 38px;">
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <label for="prodFechaFin" style="font-size: 12px; font-weight: 600; color: var(--color-texto-secundario);">Hasta:</label>
+                    <input type="date" id="prodFechaFin" class="filtro-select" style="height: 38px;">
+                </div>
+
+                <!-- Botón de Excel estilo App C# -->
+                <button id="btnExportarExcelProd" class="btn-filtrar" style="background-color: #2ebd75; border-color: #2ebd75; color: white; font-weight: 600; height: 38px; padding: 0 16px;">
+                    <iconify-icon icon="mdi:microsoft-excel" style="vertical-align: middle; margin-right: 6px; font-size: 16px;"></iconify-icon>📊 Exportar Excel
+                </button>
+            </div>
+        </div>
+
+        <div class="tabla-scroll">
+            <table class="tabla-plana">
+                <thead>
+                    <tr>
+                        <th style="width: 80px; text-align: center;">N°</th>
+                        <th>Capturista / Usuario</th>
+                        <th style="width: 150px; text-align: center;">Fecha</th>
+                        <th style="width: 150px; text-align: center;">Total PDFs</th>
+                        <th style="width: 180px; text-align: center;">Total Imágenes (Páginas)</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaProductividadBody">
+                    <!-- Filas inyectadas por JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

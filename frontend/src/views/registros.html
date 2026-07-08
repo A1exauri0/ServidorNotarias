@@ -12,16 +12,27 @@
                     <input type="text" id="buscadorRegistros" placeholder="Buscar archivo o PC...">
                 </div>
 
-                <!-- Dropdowns Personalizados -->
-                <select id="filtroUsuario" class="filtro-select">
-                    <option value="">Todos los Usuarios</option>
-                </select>
-                <select id="filtroNotaria" class="filtro-select">
-                    <option value="">Todas las Notarías</option>
-                </select>
-                <select id="filtroVolumen" class="filtro-select">
-                    <option value="">Todos los Volúmenes</option>
-                </select>
+                <!-- Dropdowns Personalizados de Simulación Web (Custom Selects) -->
+                <div class="custom-select-wrapper" id="wrapperFiltroUsuario">
+                    <button class="custom-select-btn" id="btnFiltroUsuario" data-valor="">Todos los Usuarios</button>
+                    <div class="custom-select-options" id="optionsFiltroUsuario">
+                        <div class="custom-select-option" data-valor="">Todos los Usuarios</div>
+                    </div>
+                </div>
+
+                <div class="custom-select-wrapper" id="wrapperFiltroNotaria">
+                    <button class="custom-select-btn" id="btnFiltroNotaria" data-valor="">Todas las Notarías</button>
+                    <div class="custom-select-options" id="optionsFiltroNotaria">
+                        <div class="custom-select-option" data-valor="">Todas las Notarías</div>
+                    </div>
+                </div>
+
+                <div class="custom-select-wrapper" id="wrapperFiltroVolumen">
+                    <button class="custom-select-btn" id="btnFiltroVolumen" data-valor="">Todos los Volúmenes</button>
+                    <div class="custom-select-options" id="optionsFiltroVolumen">
+                        <div class="custom-select-option" data-valor="">Todos los Volúmenes</div>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="tabla-scroll">

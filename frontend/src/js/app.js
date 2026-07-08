@@ -80,6 +80,8 @@ async function cargarVista(nombreVista) {
       }
     } else if (nombreVista === "usuarios") {
       inicializarVistaUsuarios();
+    } else if (nombreVista === "productividad") {
+      inicializarVistaProductividad();
     }
   } catch (error) {
     console.error(`Error al cargar la vista modular ${nombreVista}:`, error);
@@ -152,8 +154,8 @@ function actualizarKpisYGraficas(datos) {
 
   // Procesar datos combinados
   datos.notarias.forEach((item) => {
-    const notariaNombre = item.notaria;
-    const volumenNombre = item.volumen || "Sin Lote";
+    const notariaNombre = (item.notaria || '').toUpperCase().trim();
+    const volumenNombre = (item.volumen || '').toUpperCase().trim() || "SIN LOTE";
     const claveVolumen = `${notariaNombre} - ${volumenNombre}`;
 
     // Agrupación por Notaría
@@ -380,74 +382,82 @@ async function cargarTablaRegistros() {
   }
 }
 
-// Poblar los selects dinámicamente según los registros existentes
+// Configura y pobla de manera interactiva un custom select
+function configurarCustomDropdown(idDropdown, listaValores, textoPorDefecto) {
+  const wrapper = document.getElementById(`wrapperFiltro${idDropdown}`);
+  const btn = document.getElementById(`btnFiltro${idDropdown}`);
+  const optionsDiv = document.getElementById(`optionsFiltro${idDropdown}`);
+  if (!wrapper || !btn || !optionsDiv) return;
+
+  const valorActual = btn.getAttribute('data-valor') || '';
+
+  // Renderizar las opciones
+  optionsDiv.innerHTML = `<div class="custom-select-option ${valorActual === '' ? 'seleccionado' : ''}" data-valor="">${textoPorDefecto}</div>`;
+  listaValores.forEach(val => {
+    optionsDiv.innerHTML += `<div class="custom-select-option ${valorActual === val ? 'seleccionado' : ''}" data-valor="${val}">${val}</div>`;
+  });
+
+  // Manejar el clic en el botón para abrir/cerrar
+  if (!btn.dataset.listener) {
+    btn.dataset.listener = "true";
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.custom-select-wrapper').forEach(w => {
+        if (w !== wrapper) w.classList.remove('activo');
+      });
+      wrapper.classList.toggle('activo');
+    });
+  }
+}
+
+// Cerrar selectores al hacer clic en cualquier parte fuera de ellos
+if (!window.customDropdownGlobalListener) {
+  window.customDropdownGlobalListener = true;
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.custom-select-wrapper').forEach(w => w.classList.remove('activo'));
+  });
+}
+
+// Poblar los dropdowns dinámicamente según los registros existentes
 function poblarDropdownsFiltro() {
-  const selectUsuario = document.getElementById("filtroUsuario");
-  const selectNotaria = document.getElementById("filtroNotaria");
-  const selectVolumen = document.getElementById("filtroVolumen");
-
-  if (!selectUsuario || !selectNotaria || !selectVolumen) return;
-
-  const valUsuario = selectUsuario.value;
-  const valNotaria = selectNotaria.value;
-  const valVolumen = selectVolumen.value;
-
   const usuarios = [
-    ...new Set(listaRegistrosLocal.map((r) => r.usuario).filter(Boolean)),
+    ...new Set(listaRegistrosLocal.map((r) => (r.usuario || "").trim()).filter(Boolean)),
   ].sort();
   const notarias = [
-    ...new Set(listaRegistrosLocal.map((r) => r.notaria).filter(Boolean)),
+    ...new Set(listaRegistrosLocal.map((r) => (r.notaria || "").toUpperCase().trim()).filter(Boolean)),
   ].sort();
   const volumenes = [
-    ...new Set(listaRegistrosLocal.map((r) => r.volumen).filter(Boolean)),
+    ...new Set(listaRegistrosLocal.map((r) => (r.volumen || "").toUpperCase().trim()).filter(Boolean)),
   ].sort();
 
-  selectUsuario.innerHTML = '<option value="">Todos los Usuarios</option>';
-  usuarios.forEach((u) => {
-    selectUsuario.innerHTML += `<option value="${u}">${u}</option>`;
-  });
-  selectUsuario.value = valUsuario;
+  configurarCustomDropdown('Usuario', usuarios, 'Todos los Usuarios');
+  configurarCustomDropdown('Notaria', notarias, 'Todas las Notarías');
+  configurarCustomDropdown('Volumen', volumenes, 'Todos los Volúmenes');
 
-  selectNotaria.innerHTML = '<option value="">Todas las Notarías</option>';
-  notarias.forEach((n) => {
-    selectNotaria.innerHTML += `<option value="${n}">${n}</option>`;
-  });
-  selectNotaria.value = valNotaria;
+  // Registrar listeners de clic en las opciones para filtrar de inmediato
+  ['Usuario', 'Notaria', 'Volumen'].forEach(idDropdown => {
+    const wrapper = document.getElementById(`wrapperFiltro${idDropdown}`);
+    const btn = document.getElementById(`btnFiltro${idDropdown}`);
+    const optionsDiv = document.getElementById(`optionsFiltro${idDropdown}`);
+    if (!optionsDiv || !btn || !wrapper) return;
 
-  selectVolumen.innerHTML = '<option value="">Todos los Volúmenes</option>';
-  volumenes.forEach((v) => {
-    selectVolumen.innerHTML += `<option value="${v}">${v}</option>`;
-  });
-  selectVolumen.value = valVolumen;
+    optionsDiv.onclick = (e) => {
+      const opt = e.target.closest('.custom-select-option');
+      if (!opt) return;
 
-  // Asignar manejadores de eventos change una sola vez
-  if (!selectUsuario.dataset.listener) {
-    selectUsuario.dataset.listener = "true";
-    selectUsuario.addEventListener("change", () => {
-      const buscador = document.getElementById("buscadorRegistros");
-      filtrarYRenderizarTabla(
-        buscador ? buscador.value.toLowerCase().trim() : "",
-      );
-    });
-  }
-  if (!selectNotaria.dataset.listener) {
-    selectNotaria.dataset.listener = "true";
-    selectNotaria.addEventListener("change", () => {
-      const buscador = document.getElementById("buscadorRegistros");
-      filtrarYRenderizarTabla(
-        buscador ? buscador.value.toLowerCase().trim() : "",
-      );
-    });
-  }
-  if (!selectVolumen.dataset.listener) {
-    selectVolumen.dataset.listener = "true";
-    selectVolumen.addEventListener("change", () => {
-      const buscador = document.getElementById("buscadorRegistros");
-      filtrarYRenderizarTabla(
-        buscador ? buscador.value.toLowerCase().trim() : "",
-      );
-    });
-  }
+      const nuevoValor = opt.getAttribute('data-valor');
+      btn.setAttribute('data-valor', nuevoValor);
+      btn.innerText = opt.innerText;
+
+      optionsDiv.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('seleccionado'));
+      opt.classList.add('seleccionado');
+      wrapper.classList.remove('activo');
+
+      // Disparar renderizado con filtros actualizados
+      const buscador = document.getElementById('buscadorRegistros');
+      filtrarYRenderizarTabla(buscador ? buscador.value.toLowerCase().trim() : '');
+    };
+  });
 }
 
 // Filtra la lista de registros contemplando los dropdowns y el buscador
@@ -457,28 +467,28 @@ function filtrarYRenderizarTabla(termino) {
 
   tbody.innerHTML = "";
 
-  const selectUsuario = document.getElementById("filtroUsuario");
-  const selectNotaria = document.getElementById("filtroNotaria");
-  const selectVolumen = document.getElementById("filtroVolumen");
+  const btnUsuario = document.getElementById("btnFiltroUsuario");
+  const btnNotaria = document.getElementById("btnFiltroNotaria");
+  const btnVolumen = document.getElementById("btnFiltroVolumen");
 
-  const filtroUsuarioVal = selectUsuario ? selectUsuario.value : "";
-  const filtroNotariaVal = selectNotaria ? selectNotaria.value : "";
-  const filtroVolumenVal = selectVolumen ? selectVolumen.value : "";
+  const filtroUsuarioVal = btnUsuario ? btnUsuario.getAttribute('data-valor') : "";
+  const filtroNotariaVal = btnNotaria ? btnNotaria.getAttribute('data-valor') : "";
+  const filtroVolumenVal = btnVolumen ? btnVolumen.getAttribute('data-valor') : "";
 
   const registrosFiltrados = listaRegistrosLocal.filter((reg) => {
     const pc = (reg.pc || "").toLowerCase();
     const archivo = (reg.archivo || "").toLowerCase();
-    const notaria = (reg.notaria || "").toLowerCase();
-    const usuario = reg.usuario || "";
-    const volumen = reg.volumen || "";
+    const notaria = (reg.notaria || "").toUpperCase().trim();
+    const usuario = (reg.usuario || "").trim();
+    const volumen = (reg.volumen || "").toUpperCase().trim();
 
     // Filtro buscador (coincidencia parcial en PC o archivo)
     const coincideTexto = pc.includes(termino) || archivo.includes(termino);
 
     // Filtros dropdown (coincidencia exacta)
-    const coincideUsuario = !filtroUsuarioVal || usuario === filtroUsuarioVal;
-    const coincideNotaria = !filtroNotariaVal || notaria === filtroNotariaVal;
-    const coincideVolumen = !filtroVolumenVal || volumen === filtroVolumenVal;
+    const coincideUsuario = !filtroUsuarioVal || usuario === filtroUsuarioVal.trim();
+    const coincideNotaria = !filtroNotariaVal || notaria === filtroNotariaVal.toUpperCase().trim();
+    const coincideVolumen = !filtroVolumenVal || volumen === filtroVolumenVal.toUpperCase().trim();
 
     return (
       coincideTexto && coincideUsuario && coincideNotaria && coincideVolumen

@@ -74,6 +74,85 @@ $duplicados = 0;
 $errores = 0;
 
 // ==========================================
+// SECCIÓN PREVIA: MIGRACIÓN DE USUARIOS E INVENTARIO DESDE JSON
+// ==========================================
+$rutaUsuariosJson = 'c:\\NOTARIAS\\usuarios.json';
+if (file_exists($rutaUsuariosJson)) {
+    echo "--- INICIANDO MIGRACIÓN DE USUARIOS DESDE JSON ---\n";
+    echo "Ruta JSON: {$rutaUsuariosJson}\n";
+
+    try {
+        $jsonContenido = file_get_contents($rutaUsuariosJson);
+        $datosUsuarios = json_decode($jsonContenido, true);
+
+        if ($datosUsuarios && isset($datosUsuarios['Usuarios'])) {
+            // 1. Crear las tablas de usuarios y configuracion si no existen
+            $mysqlPdo->exec("
+                CREATE TABLE IF NOT EXISTS `usuarios` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `nombre_completo` VARCHAR(255) NOT NULL,
+                    `nombre_usuario` VARCHAR(255) UNIQUE NOT NULL,
+                    `pin` VARCHAR(4) NOT NULL,
+                    `turno` VARCHAR(50) DEFAULT 'Matutino',
+                    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            ");
+
+            $mysqlPdo->exec("
+                CREATE TABLE IF NOT EXISTS `configuracion` (
+                    `clave` VARCHAR(100) PRIMARY KEY,
+                    `valor` TEXT
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            ");
+
+            // 2. Guardar el PIN Maestro en la tabla configuracion
+            if (isset($datosUsuarios['PinMaestro'])) {
+                $pinMaestro = $datosUsuarios['PinMaestro'];
+                $stmtConfig = $mysqlPdo->prepare("INSERT INTO configuracion (clave, valor) VALUES ('pin_maestro', ?) ON DUPLICATE KEY UPDATE valor = ?");
+                $stmtConfig->execute([$pinMaestro, $pinMaestro]);
+                echo "PIN Maestro migrado/actualizado a: {$pinMaestro}\n";
+            }
+
+            // 3. Insertar usuarios
+            $stmtUsuario = $mysqlPdo->prepare("
+                INSERT INTO usuarios (nombre_completo, nombre_usuario, pin, turno) 
+                VALUES (?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE nombre_completo = ?, pin = ?, turno = ?
+            ");
+
+            $usuariosMigrados = 0;
+            foreach ($datosUsuarios['Usuarios'] as $u) {
+                $nombreCompleto = trim($u['NombreCompleto'] ?? '');
+                $nombreUsuario = strtolower(trim($u['NombreUsuario'] ?? ''));
+                $pin = trim($u['Pin'] ?? '');
+                $turno = trim($u['Turno'] ?? 'Matutino');
+
+                if (empty($nombreUsuario) || empty($pin)) continue;
+
+                $stmtUsuario->execute([
+                    $nombreCompleto,
+                    $nombreUsuario,
+                    $pin,
+                    $turno,
+                    $nombreCompleto,
+                    $pin,
+                    $turno
+                ]);
+                $usuariosMigrados++;
+            }
+            echo "Se migraron/actualizaron {$usuariosMigrados} usuarios con éxito en MySQL.\n\n";
+        } else {
+            echo "Aviso: El formato del JSON de usuarios es inválido.\n\n";
+        }
+    } catch (Exception $eUsr) {
+        echo "Error al migrar usuarios: " . $eUsr->getMessage() . "\n\n";
+    }
+} else {
+    echo "Aviso: No se encontró el archivo de usuarios histórico en: {$rutaUsuariosJson} (Omitiendo esta fase)\n\n";
+}
+
+// ==========================================
 // SECCIÓN A: MIGRACIÓN DESDE BASE DE DATOS SQLITE
 // ==========================================
 $appDataFolder = getenv('APPDATA');

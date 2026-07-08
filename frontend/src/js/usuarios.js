@@ -270,5 +270,6 @@ async function intercambiarTurnosUsuarios() {
 }
 
 // Expone las funciones de edición y eliminación al window para que funcionen con los atributos onclick del HTML
+window.inicializarVistaUsuarios = inicializarVistaUsuarios;
 window.abrirModalEditar = abrirModalEditar;
 window.confirmarEliminarUsuario = confirmarEliminarUsuario;

@@ -56,6 +56,7 @@ body {
 /* Barra Lateral (Sidebar) Plana */
 .barra-lateral {
     width: 260px;
+    flex-shrink: 0; /* Evita que flexbox colapse la barra lateral al ensancharse la tabla */
     background-color: var(--color-sidebar);
     border-right: 1px solid var(--color-tarjeta-borde);
     display: flex;
@@ -569,16 +570,22 @@ body.tema-claro .tabla-plana tbody tr:hover {
 }
 
 .filtro-select {
+    appearance: none;
+    -webkit-appearance: none;
     background-color: var(--color-fondo);
     border: 1px solid var(--color-tarjeta-borde);
     color: var(--color-texto-principal);
-    padding: 8px 12px;
+    padding: 8px 36px 8px 12px; /* Relleno amplio para acomodar la flecha personalizada */
     border-radius: 8px;
     font-family: var(--tipografia-cuerpo);
     font-size: 13px;
     outline: none;
     cursor: pointer;
-    transition: border-color 0.2s, background-color 0.2s;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238d8d99' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 14px;
+    transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
 }
 
 .filtro-select:hover {
@@ -588,6 +595,7 @@ body.tema-claro .tabla-plana tbody tr:hover {
 .filtro-select:focus {
     border-color: var(--color-primario);
     background-color: var(--color-tarjeta);
+    box-shadow: 0 0 0 3px rgba(58, 106, 201, 0.15);
 }
 
 /* Sección de Gráficas dispuestas en Vertical */
@@ -736,4 +744,91 @@ body.tema-claro .tabla-plana tbody tr:hover {
     from { transform: translateY(20px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
 }
+
+/* Dropdowns Personalizados Simulados (Custom Selects) */
+.custom-select-wrapper {
+    position: relative;
+    display: inline-block;
+    min-width: 170px;
+}
+
+.custom-select-btn {
+    width: 100%;
+    background-color: var(--color-tarjeta);
+    border: 1px solid var(--color-tarjeta-borde);
+    color: var(--color-texto-principal);
+    padding: 9px 36px 9px 12px;
+    border-radius: 8px;
+    font-family: var(--tipografia-cuerpo);
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+    outline: none;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238d8d99' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 14px;
+    transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.custom-select-btn:hover {
+    border-color: var(--color-primario);
+}
+
+.custom-select-btn:focus {
+    border-color: var(--color-primario);
+    box-shadow: 0 0 0 3px rgba(58, 106, 201, 0.15);
+}
+
+.custom-select-options {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    width: 100%;
+    max-height: 250px;
+    background-color: var(--color-tarjeta);
+    border: 1px solid var(--color-tarjeta-borde);
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+    z-index: 999;
+    overflow-y: auto;
+    display: none;
+    animation: fadeInModal 0.15s ease-out;
+}
+
+/* Mostrar dropdown */
+.custom-select-wrapper.activo .custom-select-options {
+    display: block;
+}
+
+.custom-select-wrapper.activo .custom-select-btn {
+    border-color: var(--color-primario);
+}
+
+.custom-select-option {
+    padding: 10px 14px;
+    color: var(--color-texto-principal);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.custom-select-option:hover {
+    background-color: var(--color-primario);
+    color: #ffffff;
+}
+
+.custom-select-option.seleccionado {
+    background-color: rgba(58, 106, 201, 0.15);
+    color: var(--color-primario);
+    font-weight: 600;
+}
+
 
