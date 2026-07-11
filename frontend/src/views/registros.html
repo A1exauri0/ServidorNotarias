@@ -33,6 +33,11 @@
                         <div class="custom-select-option" data-valor="">Todos los Volúmenes</div>
                     </div>
                 </div>
+
+                <!-- Botón de Excel estilo App C# -->
+                <button id="btnExportarExcelRegistros" class="btn-filtrar" style="background-color: #2ebd75; border-color: #2ebd75; color: white; font-weight: 600; height: 38px; padding: 0 16px;">
+                    <iconify-icon icon="mdi:microsoft-excel" style="vertical-align: middle; margin-right: 6px; font-size: 16px;"></iconify-icon>📊 Exportar Excel
+                </button>
             </div>
         </div>
         <div class="tabla-scroll">
@@ -54,6 +59,36 @@
                     <!-- Registros cargados dinámicamente -->
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Modal sutil para rango de fechas del Excel -->
+    <div id="modalRangoExcel" class="modal-superpuesto" style="display: none;">
+        <div class="modal-contenido">
+            <div class="modal-cabecera">
+                <h3>Rango del Reporte</h3>
+                <button type="button" id="btnCerrarModalExcel" class="btn-icono-top">
+                    <iconify-icon icon="mdi:close"></iconify-icon>
+                </button>
+            </div>
+            <div class="modal-cuerpo">
+                <form id="formRangoExcel">
+                    <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                        <div class="campo-formulario" style="flex: 1;">
+                            <label for="excelFechaInicio">Fecha Inicio:</label>
+                            <input type="date" id="excelFechaInicio" required class="filtro-select" style="width: 100%; height: 38px;">
+                        </div>
+                        <div class="campo-formulario" style="flex: 1;">
+                            <label for="excelFechaFin">Fecha Fin:</label>
+                            <input type="date" id="excelFechaFin" required class="filtro-select" style="width: 100%; height: 38px;">
+                        </div>
+                    </div>
+                    <div class="modal-acciones" style="display: flex; justify-content: flex-end; gap: 10px;">
+                        <button type="button" id="btnCancelarExcel" class="btn-filtrar" style="background-color: transparent; border: 1px solid var(--color-tarjeta-borde); color: var(--color-texto-secundario); height: 38px; padding: 0 20px;">Cancelar</button>
+                        <button type="submit" class="btn-filtrar" style="background-color: #2ebd75; border-color: #2ebd75; color: white; height: 38px; padding: 0 20px; font-weight: 600;">Generar Excel</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 </div>

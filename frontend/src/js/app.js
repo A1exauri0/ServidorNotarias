@@ -14,10 +14,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // Cargar la vista por defecto (Dashboard)
   cargarVista("dashboard");
 
-  // Evento de clic en el botón de aplicar filtros
+  // Evento de clic en el botón de aplicar filtros (Global)
   document.getElementById("btnFiltrar").addEventListener("click", () => {
     if (vistaActual === "dashboard") {
       consultarEstadisticas();
+    } else if (vistaActual === "registros") {
+      cargarTablaRegistros();
+    } else if (vistaActual === "productividad") {
+      inicializarVistaProductividad();
     }
   });
 
@@ -64,10 +68,20 @@ async function cargarVista(nombreVista) {
     const html = await respuesta.text();
     document.getElementById("contenido-vista").innerHTML = html;
 
-    // Inicializadores según la vista
+    const elTitulo = document.querySelector(".titulo-pagina h1");
+    const elSubtitulo = document.querySelector(".titulo-pagina p");
+    const elFiltrosFecha = document.querySelector(".filtros-fecha");
+
+    // Inicializadores y configuración de encabezado según la vista activa
     if (nombreVista === "dashboard") {
+      if (elTitulo) elTitulo.innerText = "Resumen de Productividad";
+      if (elSubtitulo) elSubtitulo.innerText = "Monitoreo y KPIs locales en tiempo real";
+      if (elFiltrosFecha) elFiltrosFecha.style.display = "flex";
       consultarEstadisticas();
     } else if (nombreVista === "registros") {
+      if (elTitulo) elTitulo.innerText = "Registros de Auditoría";
+      if (elSubtitulo) elSubtitulo.innerText = "Listado detallado de capturas físicas procesadas";
+      if (elFiltrosFecha) elFiltrosFecha.style.display = "flex";
       cargarTablaRegistros();
 
       // Vincular evento de búsqueda del buscador inyectado
@@ -78,9 +92,21 @@ async function cargarVista(nombreVista) {
           filtrarYRenderizarTabla(termino);
         });
       }
+
+      // Vincular evento de exportación de registros detallados a Excel
+      const btnExportarExcel = document.getElementById("btnExportarExcelRegistros");
+      if (btnExportarExcel) {
+        btnExportarExcel.addEventListener("click", exportarRegistrosExcel);
+      }
     } else if (nombreVista === "usuarios") {
+      if (elTitulo) elTitulo.innerText = "Administrar Usuarios";
+      if (elSubtitulo) elSubtitulo.innerText = "Configuración y gestión de credenciales y accesos";
+      if (elFiltrosFecha) elFiltrosFecha.style.display = "none";
       inicializarVistaUsuarios();
     } else if (nombreVista === "productividad") {
+      if (elTitulo) elTitulo.innerText = "Productividad por Capturista";
+      if (elSubtitulo) elSubtitulo.innerText = "Reporte consolidado diario del rendimiento de los usuarios";
+      if (elFiltrosFecha) elFiltrosFecha.style.display = "flex";
       inicializarVistaProductividad();
     }
   } catch (error) {
@@ -154,8 +180,9 @@ function actualizarKpisYGraficas(datos) {
 
   // Procesar datos combinados
   datos.notarias.forEach((item) => {
-    const notariaNombre = (item.notaria || '').toUpperCase().trim();
-    const volumenNombre = (item.volumen || '').toUpperCase().trim() || "SIN LOTE";
+    const notariaNombre = (item.notaria || "").toUpperCase().trim();
+    const volumenNombre =
+      (item.volumen || "").toUpperCase().trim() || "SIN LOTE";
     const claveVolumen = `${notariaNombre} - ${volumenNombre}`;
 
     // Agrupación por Notaría
@@ -361,7 +388,14 @@ function renderizarGraficaVolumenes(datosVolumenes) {
 // Carga la lista de registros en tiempo real desde la API
 async function cargarTablaRegistros() {
   try {
-    const respuesta = await fetch("http://localhost:3000/api/registros");
+    const fechaInicio = document.getElementById("fechaInicio")?.value;
+    const fechaFin = document.getElementById("fechaFin")?.value;
+    let url = "http://localhost:3000/api/registros";
+    if (fechaInicio && fechaFin) {
+      url += `?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`;
+    }
+
+    const respuesta = await fetch(url);
     const datos = await respuesta.json();
 
     if (datos.ok) {
@@ -389,23 +423,23 @@ function configurarCustomDropdown(idDropdown, listaValores, textoPorDefecto) {
   const optionsDiv = document.getElementById(`optionsFiltro${idDropdown}`);
   if (!wrapper || !btn || !optionsDiv) return;
 
-  const valorActual = btn.getAttribute('data-valor') || '';
+  const valorActual = btn.getAttribute("data-valor") || "";
 
   // Renderizar las opciones
-  optionsDiv.innerHTML = `<div class="custom-select-option ${valorActual === '' ? 'seleccionado' : ''}" data-valor="">${textoPorDefecto}</div>`;
-  listaValores.forEach(val => {
-    optionsDiv.innerHTML += `<div class="custom-select-option ${valorActual === val ? 'seleccionado' : ''}" data-valor="${val}">${val}</div>`;
+  optionsDiv.innerHTML = `<div class="custom-select-option ${valorActual === "" ? "seleccionado" : ""}" data-valor="">${textoPorDefecto}</div>`;
+  listaValores.forEach((val) => {
+    optionsDiv.innerHTML += `<div class="custom-select-option ${valorActual === val ? "seleccionado" : ""}" data-valor="${val}">${val}</div>`;
   });
 
   // Manejar el clic en el botón para abrir/cerrar
   if (!btn.dataset.listener) {
     btn.dataset.listener = "true";
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      document.querySelectorAll('.custom-select-wrapper').forEach(w => {
-        if (w !== wrapper) w.classList.remove('activo');
+      document.querySelectorAll(".custom-select-wrapper").forEach((w) => {
+        if (w !== wrapper) w.classList.remove("activo");
       });
-      wrapper.classList.toggle('activo');
+      wrapper.classList.toggle("activo");
     });
   }
 }
@@ -413,49 +447,65 @@ function configurarCustomDropdown(idDropdown, listaValores, textoPorDefecto) {
 // Cerrar selectores al hacer clic en cualquier parte fuera de ellos
 if (!window.customDropdownGlobalListener) {
   window.customDropdownGlobalListener = true;
-  document.addEventListener('click', () => {
-    document.querySelectorAll('.custom-select-wrapper').forEach(w => w.classList.remove('activo'));
+  document.addEventListener("click", () => {
+    document
+      .querySelectorAll(".custom-select-wrapper")
+      .forEach((w) => w.classList.remove("activo"));
   });
 }
 
 // Poblar los dropdowns dinámicamente según los registros existentes
 function poblarDropdownsFiltro() {
   const usuarios = [
-    ...new Set(listaRegistrosLocal.map((r) => (r.usuario || "").trim()).filter(Boolean)),
+    ...new Set(
+      listaRegistrosLocal.map((r) => (r.usuario || "").trim()).filter(Boolean),
+    ),
   ].sort();
   const notarias = [
-    ...new Set(listaRegistrosLocal.map((r) => (r.notaria || "").toUpperCase().trim()).filter(Boolean)),
+    ...new Set(
+      listaRegistrosLocal
+        .map((r) => (r.notaria || "").toUpperCase().trim())
+        .filter(Boolean),
+    ),
   ].sort();
   const volumenes = [
-    ...new Set(listaRegistrosLocal.map((r) => (r.volumen || "").toUpperCase().trim()).filter(Boolean)),
+    ...new Set(
+      listaRegistrosLocal
+        .map((r) => (r.volumen || "").toUpperCase().trim())
+        .filter(Boolean),
+    ),
   ].sort();
 
-  configurarCustomDropdown('Usuario', usuarios, 'Todos los Usuarios');
-  configurarCustomDropdown('Notaria', notarias, 'Todas las Notarías');
-  configurarCustomDropdown('Volumen', volumenes, 'Todos los Volúmenes');
+  configurarCustomDropdown("Usuario", usuarios, "Todos los Usuarios");
+  configurarCustomDropdown("Notaria", notarias, "Todas las Notarías");
+  configurarCustomDropdown("Volumen", volumenes, "Todos los Volúmenes");
 
   // Registrar listeners de clic en las opciones para filtrar de inmediato
-  ['Usuario', 'Notaria', 'Volumen'].forEach(idDropdown => {
+  ["Usuario", "Notaria", "Volumen"].forEach((idDropdown) => {
     const wrapper = document.getElementById(`wrapperFiltro${idDropdown}`);
     const btn = document.getElementById(`btnFiltro${idDropdown}`);
     const optionsDiv = document.getElementById(`optionsFiltro${idDropdown}`);
     if (!optionsDiv || !btn || !wrapper) return;
 
     optionsDiv.onclick = (e) => {
-      const opt = e.target.closest('.custom-select-option');
+      const opt = e.target.closest(".custom-select-option");
       if (!opt) return;
 
-      const nuevoValor = opt.getAttribute('data-valor');
-      btn.setAttribute('data-valor', nuevoValor);
+      const nuevoValor = opt.getAttribute("data-valor");
+      btn.setAttribute("data-valor", nuevoValor);
       btn.innerText = opt.innerText;
 
-      optionsDiv.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('seleccionado'));
-      opt.classList.add('seleccionado');
-      wrapper.classList.remove('activo');
+      optionsDiv
+        .querySelectorAll(".custom-select-option")
+        .forEach((o) => o.classList.remove("seleccionado"));
+      opt.classList.add("seleccionado");
+      wrapper.classList.remove("activo");
 
       // Disparar renderizado con filtros actualizados
-      const buscador = document.getElementById('buscadorRegistros');
-      filtrarYRenderizarTabla(buscador ? buscador.value.toLowerCase().trim() : '');
+      const buscador = document.getElementById("buscadorRegistros");
+      filtrarYRenderizarTabla(
+        buscador ? buscador.value.toLowerCase().trim() : "",
+      );
     };
   });
 }
@@ -471,9 +521,15 @@ function filtrarYRenderizarTabla(termino) {
   const btnNotaria = document.getElementById("btnFiltroNotaria");
   const btnVolumen = document.getElementById("btnFiltroVolumen");
 
-  const filtroUsuarioVal = btnUsuario ? btnUsuario.getAttribute('data-valor') : "";
-  const filtroNotariaVal = btnNotaria ? btnNotaria.getAttribute('data-valor') : "";
-  const filtroVolumenVal = btnVolumen ? btnVolumen.getAttribute('data-valor') : "";
+  const filtroUsuarioVal = btnUsuario
+    ? btnUsuario.getAttribute("data-valor")
+    : "";
+  const filtroNotariaVal = btnNotaria
+    ? btnNotaria.getAttribute("data-valor")
+    : "";
+  const filtroVolumenVal = btnVolumen
+    ? btnVolumen.getAttribute("data-valor")
+    : "";
 
   const registrosFiltrados = listaRegistrosLocal.filter((reg) => {
     const pc = (reg.pc || "").toLowerCase();
@@ -486,9 +542,12 @@ function filtrarYRenderizarTabla(termino) {
     const coincideTexto = pc.includes(termino) || archivo.includes(termino);
 
     // Filtros dropdown (coincidencia exacta)
-    const coincideUsuario = !filtroUsuarioVal || usuario === filtroUsuarioVal.trim();
-    const coincideNotaria = !filtroNotariaVal || notaria === filtroNotariaVal.toUpperCase().trim();
-    const coincideVolumen = !filtroVolumenVal || volumen === filtroVolumenVal.toUpperCase().trim();
+    const coincideUsuario =
+      !filtroUsuarioVal || usuario === filtroUsuarioVal.trim();
+    const coincideNotaria =
+      !filtroNotariaVal || notaria === filtroNotariaVal.toUpperCase().trim();
+    const coincideVolumen =
+      !filtroVolumenVal || volumen === filtroVolumenVal.toUpperCase().trim();
 
     return (
       coincideTexto && coincideUsuario && coincideNotaria && coincideVolumen
@@ -535,4 +594,79 @@ function filtrarYRenderizarTabla(termino) {
         `;
     tbody.appendChild(fila);
   });
+}
+
+// Abre el modal para seleccionar el rango de fechas antes de generar el Excel premium
+function exportarRegistrosExcel() {
+  const modal = document.getElementById("modalRangoExcel");
+  if (!modal) {
+    alert("Error: No se encontró el modalRangoExcel en el HTML.");
+    return;
+  }
+
+  // Rango de fechas por defecto: ultimos 7 dias (Igual que la app de C#)
+  const hoy = new Date();
+  const hace7Dias = new Date();
+  hace7Dias.setDate(hoy.getDate() - 7);
+
+  const formatoFecha = (d) => {
+    const anio = d.getFullYear();
+    const mes = String(d.getMonth() + 1).padStart(2, "0");
+    const dia = String(d.getDate()).padStart(2, "0");
+    return `${anio}-${mes}-${dia}`;
+  };
+
+  const inputInicio = document.getElementById("excelFechaInicio");
+  const inputFin = document.getElementById("excelFechaFin");
+
+  if (inputInicio) inputInicio.value = formatoFecha(hace7Dias);
+  if (inputFin) inputFin.value = formatoFecha(hoy);
+
+  modal.style.display = "flex";
+
+  // Vincular eventos de cierre
+  const btnCerrar = document.getElementById("btnCerrarModalExcel");
+  const btnCancelar = document.getElementById("btnCancelarExcel");
+  const form = document.getElementById("formRangoExcel");
+
+  const cerrarModal = () => {
+    modal.style.display = "none";
+  };
+
+  if (btnCerrar && !btnCerrar.dataset.listener) {
+    btnCerrar.dataset.listener = "true";
+    btnCerrar.addEventListener("click", cerrarModal);
+  }
+
+  if (btnCancelar && !btnCancelar.dataset.listener) {
+    btnCancelar.dataset.listener = "true";
+    btnCancelar.addEventListener("click", cerrarModal);
+  }
+
+  if (form && !form.dataset.listener) {
+    form.dataset.listener = "true";
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const fechaInicio = inputInicio.value;
+      const fechaFin = inputFin.value;
+
+      cerrarModal();
+
+      try {
+        const url = `http://localhost:3000/api/estadisticas/exportar-excel?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`;
+        const respuesta = await fetch(url);
+        const datos = await respuesta.json();
+
+        if (datos.ok) {
+          alert("Reporte Excel generado y abierto de forma automática.");
+        } else {
+          alert("Error al generar Excel: " + datos.mensaje);
+        }
+      } catch (err) {
+        console.error("Error al exportar Excel:", err);
+        alert("Error de conexión con el servidor al generar el reporte Excel.");
+      }
+    });
+  }
 }

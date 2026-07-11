@@ -162,14 +162,24 @@ async function subirPdf(req, res) {
     }
 }
 
-// Obtiene los últimos 100 registros con la columna usuario incluida
+// Obtiene los registros de auditoría (opcionalmente filtrados por rango de fechas)
 async function obtenerRegistros(req, res) {
     try {
-        const [rows] = await dbPool.query(`
+        const { fecha_inicio, fecha_fin } = req.query;
+        let querySql = `
             SELECT id, fecha_hora, turno, usuario, pc, notaria, volumen, archivo, paginas, exportado 
             FROM \`auditoria\`
-            ORDER BY fecha_hora DESC LIMIT 100
-        `);
+        `;
+        const queryParams = [];
+
+        if (fecha_inicio && fecha_fin) {
+            querySql += ` WHERE DATE(fecha_hora) BETWEEN ? AND ? `;
+            queryParams.push(fecha_inicio, fecha_fin);
+        }
+
+        querySql += ` ORDER BY fecha_hora DESC LIMIT 100 `;
+
+        const [rows] = await dbPool.query(querySql, queryParams);
         res.json({ ok: true, registros: rows });
     } catch (error) {
         res.status(500).json({ ok: false, mensaje: 'Error al consultar registros: ' + error.message });

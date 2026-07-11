@@ -13,4 +13,7 @@ enrutador.get('/productividad', controladorEstadisticas.obtenerProductividadGene
 // Obtener productividad diaria por capturista y dia (Nueva vista Excel)
 enrutador.get('/productividad/diaria', controladorEstadisticas.obtenerProductividadDiaria);
 
+// Exportar reporte de auditoría premium en Excel y abrirlo automáticamente
+enrutador.get('/exportar-excel', controladorEstadisticas.exportarExcelAuditoria);
+
 module.exports = enrutador;
