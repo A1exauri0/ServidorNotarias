@@ -1,0 +1,94 @@
+<!-- Vista de Transferencia Masiva de Archivos PDF -->
+<div id="vista-importar-wrapper">
+    <div class="tabla-contenedor">
+        <div class="tabla-cabecera" style="margin-bottom: 20px;">
+            <div>
+                <h3>Transferir Archivos PDF al Servidor Central</h3>
+                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--color-texto-secundario);">
+                    Escanea una carpeta local o de red, omite archivos ya registrados y copia masivamente los PDFs al servidor.
+                </p>
+            </div>
+        </div>
+
+        <!-- Paso 1: Seleccionar Notaria Local -->
+        <div class="tarjeta-panel" style="margin-bottom: 20px; padding: 22px; border-radius: 14px; border: 1px solid var(--color-tarjeta-borde);">
+            <h4 style="margin: 0 0 15px 0; font-size: 13px; color: var(--color-texto-secundario); text-transform: uppercase; letter-spacing: 0.8px;">
+                <iconify-icon icon="mdi:numeric-1-circle" style="font-size: 16px; margin-right: 5px; vertical-align: middle;"></iconify-icon>
+                Seleccionar Notaría en C:\\NOTARIAS
+            </h4>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <select id="cboNotariaImportar" class="filtro-select" style="flex: 1; height: 42px; padding: 0 14px; font-size: 14px;">
+                    <option value="">Cargando notarías...</option>
+                </select>
+                <button id="btnEscanearDirectorio" class="btn-filtrar"
+                    style="height: 42px; padding: 0 22px; background-color: #3a6ac9; border-color: #3a6ac9; color: white; font-weight: 600; white-space: nowrap;">
+                    <iconify-icon icon="mdi:folder-search-outline" style="vertical-align: middle; margin-right: 6px;"></iconify-icon>
+                    Escanear
+                </button>
+            </div>
+            <p id="lblEstadoEscaneo" style="margin: 10px 0 0 0; font-size: 12px; color: var(--color-texto-secundario);"></p>
+        </div>
+
+        <!-- Paso 2: Resultados del Escaneo y Transferencia -->
+        <div id="panelResultadosImportar" style="display: none;">
+            <div class="tarjeta-panel" style="padding: 22px; border-radius: 14px; border: 1px solid var(--color-tarjeta-borde); margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 15px;">
+                    <h4 style="margin: 0; font-size: 13px; color: var(--color-texto-secundario); text-transform: uppercase; letter-spacing: 0.8px;">
+                        <iconify-icon icon="mdi:numeric-2-circle" style="font-size: 16px; margin-right: 5px; vertical-align: middle;"></iconify-icon>
+                        Resultados del Escaneo
+                    </h4>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                        <!-- Leyenda -->
+                        <span style="font-size: 11px; display: flex; align-items: center; gap: 5px;">
+                            <span style="display:inline-block; width:12px; height:12px; border-radius:3px; background: #E2EFDA;"></span>
+                            Nuevo
+                        </span>
+                        <span style="font-size: 11px; display: flex; align-items: center; gap: 5px;">
+                            <span style="display:inline-block; width:12px; height:12px; border-radius:3px; background: #F2F2F2; border: 1px solid #ccc;"></span>
+                            Ya registrado
+                        </span>
+                        <span style="font-size: 11px; display: flex; align-items: center; gap: 5px;">
+                            <span style="display:inline-block; width:12px; height:12px; border-radius:3px; background: #FFF2CC;"></span>
+                            Pesado (+500MB, copia directa)
+                        </span>
+                        <button id="btnTransferirTodo" class="btn-filtrar"
+                            style="height: 38px; padding: 0 18px; background-color: #2ebd75; border-color: #2ebd75; color: white; font-weight: 600;">
+                            <iconify-icon icon="mdi:cloud-upload-outline" style="vertical-align: middle; margin-right: 6px;"></iconify-icon>
+                            Transferir Todo
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Barra de Progreso Global -->
+                <div id="barraProgresoImportar" style="display: none; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px;">
+                        <span id="lblProgresoTexto" style="color: var(--color-texto-secundario);">Importando...</span>
+                        <span id="lblPorcentaje" style="font-weight: 600; color: var(--color-texto);">0%</span>
+                    </div>
+                    <div style="height: 8px; background-color: var(--color-tarjeta-borde); border-radius: 99px; overflow: hidden;">
+                        <div id="barraProgreso" style="height: 100%; width: 0%; background: linear-gradient(90deg, #3a6ac9, #2ebd75); border-radius: 99px; transition: width 0.3s ease;"></div>
+                    </div>
+                </div>
+
+                <div class="tabla-scroll" style="max-height: 450px; overflow-y: auto;">
+                    <table class="tabla-plana">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px; text-align: center;">
+                                    <input type="checkbox" id="chkSeleccionarTodos" title="Seleccionar todos los nuevos" style="cursor: pointer;">
+                                </th>
+                                <th>Archivo</th>
+                                <th style="width: 180px;">Notaría</th>
+                                <th style="width: 140px;">Volumen / Lote</th>
+                                <th style="width: 100px; text-align: center;">Tamaño</th>
+                                <th style="width: 130px; text-align: center;">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaImportarBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

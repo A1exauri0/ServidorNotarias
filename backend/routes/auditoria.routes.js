@@ -46,7 +46,12 @@ enrutador.post('/subir-pdf', upload.single('archivo'), controladorAuditoria.subi
 // 3. Endpoint para obtener los últimos 100 registros
 enrutador.get('/registros', controladorAuditoria.obtenerRegistros);
 
-// 4. Endpoint dummy para monitoreo de digitalizacion
+// 4. Endpoints para la importación masiva desde directorios locales o de red
+enrutador.get('/notarias-locales', controladorAuditoria.obtenerNotariasLocales);
+enrutador.post('/escanear-directorio', controladorAuditoria.escanearDirectorio);
+enrutador.post('/importar-archivo', controladorAuditoria.importarArchivoPdf);
+
+// 5. Endpoint dummy para monitoreo de digitalizacion
 enrutador.get('/digitalizacion', (req, res) => {
     res.json({ ok: true, mensaje: 'Servicio de digitalización activo.' });
 });

@@ -108,6 +108,11 @@ async function cargarVista(nombreVista) {
       if (elSubtitulo) elSubtitulo.innerText = "Reporte consolidado diario del rendimiento de los usuarios";
       if (elFiltrosFecha) elFiltrosFecha.style.display = "flex";
       inicializarVistaProductividad();
+    } else if (nombreVista === "importar") {
+      if (elTitulo) elTitulo.innerText = "Transferir Archivos PDF";
+      if (elSubtitulo) elSubtitulo.innerText = "Importar y registrar PDFs desde carpetas locales o de red";
+      if (elFiltrosFecha) elFiltrosFecha.style.display = "none";
+      inicializarVistaImportar();
     }
   } catch (error) {
     console.error(`Error al cargar la vista modular ${nombreVista}:`, error);
