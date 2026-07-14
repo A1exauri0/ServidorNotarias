@@ -1,21 +1,5 @@
-<!-- Vista de Administración de Usuarios y PIN Maestro -->
+<!-- Vista de Administración de Usuarios -->
 <div id="vista-usuarios-wrapper">
-    
-    <!-- Configuración del PIN Maestro -->
-    <div class="tarjeta-personalizada pin-maestro-caja" style="margin-bottom: 25px; padding: 20px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
-            <div>
-                <h4 style="margin: 0 0 5px 0; font-family: var(--tipografia-titulos); font-size: 15px; color: var(--color-texto-principal);">PIN Maestro de Autorización</h4>
-                <p style="margin: 0; font-size: 12px; color: var(--color-texto-secundario);">Utilizado por los clientes C# para validar permisos críticos locales</p>
-            </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <input type="password" id="txtPinMaestro" maxlength="4" placeholder="••••" style="width: 90px; text-align: center; font-size: 15px; letter-spacing: 4px;" class="filtro-select">
-                <button id="btnGuardarPinMaestro" class="btn-filtrar" style="padding: 8px 16px;">
-                    <iconify-icon icon="mdi:content-save-outline" style="vertical-align: middle; margin-right: 4px;"></iconify-icon>Guardar
-                </button>
-            </div>
-        </div>
-    </div>
 
     <!-- Tabla y CRUD de Usuarios -->
     <div class="tabla-contenedor">

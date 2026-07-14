@@ -18,7 +18,8 @@ if (!file_exists($rutaEnv)) {
 $variablesEnv = [];
 $lineasEnv = file($rutaEnv, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 foreach ($lineasEnv as $linea) {
-    if (strpos(trim($linea), '#') === 0) continue; // Omitir comentarios
+    if (strpos(trim($linea), '#') === 0)
+        continue; // Omitir comentarios
     list($nombre, $valor) = explode('=', $linea, 2);
     $variablesEnv[trim($nombre)] = trim($valor);
 }
@@ -106,15 +107,7 @@ if (file_exists($rutaUsuariosJson)) {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
 
-            // 2. Guardar el PIN Maestro en la tabla configuracion
-            if (isset($datosUsuarios['PinMaestro'])) {
-                $pinMaestro = $datosUsuarios['PinMaestro'];
-                $stmtConfig = $mysqlPdo->prepare("INSERT INTO configuracion (clave, valor) VALUES ('pin_maestro', ?) ON DUPLICATE KEY UPDATE valor = ?");
-                $stmtConfig->execute([$pinMaestro, $pinMaestro]);
-                echo "PIN Maestro migrado/actualizado a: {$pinMaestro}\n";
-            }
-
-            // 3. Insertar usuarios
+            // 2. Insertar usuarios
             $stmtUsuario = $mysqlPdo->prepare("
                 INSERT INTO usuarios (nombre_completo, nombre_usuario, pin, turno) 
                 VALUES (?, ?, ?, ?)
@@ -128,7 +121,8 @@ if (file_exists($rutaUsuariosJson)) {
                 $pin = trim($u['Pin'] ?? '');
                 $turno = trim($u['Turno'] ?? 'Matutino');
 
-                if (empty($nombreUsuario) || empty($pin)) continue;
+                if (empty($nombreUsuario) || empty($pin))
+                    continue;
 
                 $stmtUsuario->execute([
                     $nombreCompleto,
@@ -189,7 +183,7 @@ if (file_exists($rutaSqlite)) {
                 'volumen' => $reg['volumen'] ?? $reg['lote'] ?? null,
                 'archivo' => $reg['archivo_original'] ?? null,
                 'detalles' => $reg['detalles'] ?? null,
-                'paginas' => (int)($reg['paginas'] ?? 0),
+                'paginas' => (int) ($reg['paginas'] ?? 0),
                 'lugar_trabajo' => $reg['lugar_trabajo'] ?? null,
                 'exportado_en' => $reg['exportado_en'] ?? null
             ];
@@ -210,7 +204,8 @@ if (file_exists($rutaSqlite)) {
         echo "Migración de SQLite completada con éxito.\n\n";
 
     } catch (Exception $eSqlite) {
-        if ($mysqlPdo->inTransaction()) $mysqlPdo->rollBack();
+        if ($mysqlPdo->inTransaction())
+            $mysqlPdo->rollBack();
         echo "Error al procesar base de datos SQLite: " . $eSqlite->getMessage() . "\n\n";
     }
 } else {
@@ -229,7 +224,7 @@ if (is_dir($directorioMonitoreo)) {
     $directoriosPc = glob($directorioMonitoreo . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR);
     if (!empty($directoriosPc)) {
         $mysqlPdo->beginTransaction();
-        
+
         foreach ($directoriosPc as $dirPc) {
             $rutaJson = $dirPc . DIRECTORY_SEPARATOR . 'auditoria.json';
             if (file_exists($rutaJson)) {
@@ -261,7 +256,7 @@ if (is_dir($directorioMonitoreo)) {
                             'volumen' => $reg['Lote'] ?? $reg['lote'] ?? $reg['volumen'] ?? null,
                             'archivo' => $reg['ArchivoOriginal'] ?? $reg['archivo_original'] ?? $reg['archivo'] ?? null,
                             'detalles' => $reg['Detalles'] ?? $reg['detalles'] ?? null,
-                            'paginas' => (int)($reg['Paginas'] ?? $reg['paginas'] ?? 0),
+                            'paginas' => (int) ($reg['Paginas'] ?? $reg['paginas'] ?? 0),
                             'lugar_trabajo' => $reg['LugarTrabajo'] ?? $reg['lugar_trabajo'] ?? null,
                             'exportado_en' => $reg['ExportadoEn'] ?? $reg['exportado_en'] ?? null
                         ];
@@ -274,7 +269,7 @@ if (is_dir($directorioMonitoreo)) {
                 }
             }
         }
-        
+
         $mysqlPdo->commit();
         echo "Migración de archivos JSON de red completada.\n\n";
     } else {
@@ -295,16 +290,19 @@ echo "======================================\n";
 
 
 // Función auxiliar para insertar un registro en la tabla única 'auditoria' de MySQL
-function migrarRegistro($reg, $mysqlPdo, $chequeoDuplicado, $insertAuditoria, &$procesados, &$duplicados, &$errores) {
+function migrarRegistro($reg, $mysqlPdo, $chequeoDuplicado, $insertAuditoria, &$procesados, &$duplicados, &$errores)
+{
     try {
         $fechaHora = $reg['fecha_hora'];
-        if (empty($fechaHora)) return;
+        if (empty($fechaHora))
+            return;
 
         $pc = $reg['pc'];
         $archivo = $reg['archivo'];
-        if (empty($archivo)) return;
+        if (empty($archivo))
+            return;
 
-        $paginas = (int)$reg['paginas'];
+        $paginas = (int) $reg['paginas'];
         $exportadoEn = $reg['exportado_en'] ?? $fechaHora;
 
         // Separar de forma inteligente si viene en formato "NOTARIA XX\VOLUMEN YY"
