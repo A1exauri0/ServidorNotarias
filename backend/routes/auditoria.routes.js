@@ -50,6 +50,7 @@ enrutador.get('/registros', controladorAuditoria.obtenerRegistros);
 enrutador.get('/notarias-locales', controladorAuditoria.obtenerNotariasLocales);
 enrutador.post('/escanear-directorio', controladorAuditoria.escanearDirectorio);
 enrutador.post('/importar-archivo', controladorAuditoria.importarArchivoPdf);
+enrutador.post('/sincronizar-astronmx', controladorAuditoria.sincronizarAstronmx);
 
 // 5. Endpoint dummy para monitoreo de digitalizacion
 enrutador.get('/digitalizacion', (req, res) => {

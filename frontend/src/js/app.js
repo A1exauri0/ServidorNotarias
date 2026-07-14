@@ -98,6 +98,59 @@ async function cargarVista(nombreVista) {
       if (btnExportarExcel) {
         btnExportarExcel.addEventListener("click", exportarRegistrosExcel);
       }
+
+      // Vincular evento de Sincronización con Astronmx (Estilo app C#)
+      const btnSinc = document.getElementById("btnSincronizarAstronmx");
+      if (btnSinc) {
+        btnSinc.addEventListener("click", () => {
+          const modal = document.getElementById("modalSincronizarAstronmx");
+          if (modal) {
+            document.getElementById("panelProgresoSinc").style.display = "none";
+            document.getElementById("btnConfirmarSinc").disabled = false;
+            document.getElementById("btnCancelarSinc").disabled = false;
+            modal.style.display = "flex";
+          }
+        });
+      }
+
+      const btnCerrarSinc = document.getElementById("btnCerrarModalSinc");
+      const btnCancelarSinc = document.getElementById("btnCancelarSinc");
+      const modalSinc = document.getElementById("modalSincronizarAstronmx");
+
+      const cerrarModalSinc = () => {
+        if (modalSinc) modalSinc.style.display = "none";
+      };
+
+      if (btnCerrarSinc) btnCerrarSinc.addEventListener("click", cerrarModalSinc);
+      if (btnCancelarSinc) btnCancelarSinc.addEventListener("click", cerrarModalSinc);
+
+      const btnConfirmarSinc = document.getElementById("btnConfirmarSinc");
+      if (btnConfirmarSinc) {
+        btnConfirmarSinc.addEventListener("click", async () => {
+          btnConfirmarSinc.disabled = true;
+          document.getElementById("btnCancelarSinc").disabled = true;
+          document.getElementById("panelProgresoSinc").style.display = "block";
+
+          try {
+            const respuesta = await fetch("http://localhost:3000/api/sincronizar-astronmx", {
+              method: "POST"
+            });
+            const datos = await respuesta.json();
+
+            if (datos.ok) {
+              alert(datos.mensaje);
+              cargarTablaRegistros(); // Refrescar la tabla para ver cambios
+            } else {
+              alert("⚠️ " + datos.mensaje);
+            }
+          } catch (error) {
+            console.error("Error al sincronizar con Astronmx:", error);
+            alert("❌ No se pudo conectar con el servidor local para la sincronización.");
+          } finally {
+            cerrarModalSinc();
+          }
+        });
+      }
     } else if (nombreVista === "usuarios") {
       if (elTitulo) elTitulo.innerText = "Administrar Usuarios";
       if (elSubtitulo) elSubtitulo.innerText = "Configuración y gestión de credenciales y accesos";

@@ -38,6 +38,11 @@
                 <button id="btnExportarExcelRegistros" class="btn-filtrar" style="background-color: #2ebd75; border-color: #2ebd75; color: white; font-weight: 600; height: 38px; padding: 0 16px;">
                     <iconify-icon icon="mdi:microsoft-excel" style="vertical-align: middle; margin-right: 6px; font-size: 16px;"></iconify-icon>📊 Exportar Excel
                 </button>
+
+                <!-- Botón Sincronizar Astronmx -->
+                <button id="btnSincronizarAstronmx" class="btn-filtrar" style="background-color: #3a6ac9; border-color: #3a6ac9; color: white; font-weight: 600; height: 38px; padding: 0 16px;">
+                    <iconify-icon icon="mdi:cloud-sync" style="vertical-align: middle; margin-right: 6px; font-size: 16px;"></iconify-icon>🌐 Sincronizar Astronmx
+                </button>
             </div>
         </div>
         <div class="tabla-scroll">
@@ -88,6 +93,27 @@
                         <button type="submit" class="btn-filtrar" style="background-color: #2ebd75; border-color: #2ebd75; color: white; height: 38px; padding: 0 20px; font-weight: 600;">Generar Excel</button>
                     </div>
                 </form>
+    <!-- Modal de Sincronización con Astronmx -->
+    <div id="modalSincronizarAstronmx" class="modal-superpuesto" style="display: none;">
+        <div class="modal-contenido" style="width: 420px;">
+            <div class="modal-cabecera">
+                <h3>Sincronizar con Astronmx</h3>
+                <button type="button" id="btnCerrarModalSinc" class="btn-icono-top">
+                    <iconify-icon icon="mdi:close"></iconify-icon>
+                </button>
+            </div>
+            <div class="modal-cuerpo" style="padding-top: 15px;">
+                <p style="margin: 0 0 20px 0; font-size: 13.5px; color: var(--color-texto-secundario); line-height: 1.5;">
+                    ¿Desea enviar todos los registros de auditoría locales pendientes hacia el servidor central en la nube de Astronmx?
+                </p>
+                <div id="panelProgresoSinc" style="display: none; margin-bottom: 20px; text-align: center;">
+                    <iconify-icon icon="line-md:loading-twotone-loop" style="font-size: 32px; color: #3a6ac9; margin-bottom: 8px;"></iconify-icon>
+                    <p style="margin: 0; font-size: 13px; color: var(--color-texto);">Enviando registros en segundo plano...</p>
+                </div>
+                <div class="modal-acciones" style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" id="btnCancelarSinc" class="btn-filtrar" style="background-color: transparent; border: 1px solid var(--color-tarjeta-borde); color: var(--color-texto-secundario); height: 38px; padding: 0 20px;">Cancelar</button>
+                    <button type="button" id="btnConfirmarSinc" class="btn-filtrar" style="background-color: #3a6ac9; border-color: #3a6ac9; color: white; height: 38px; padding: 0 20px; font-weight: 600;">Sincronizar</button>
+                </div>
             </div>
         </div>
     </div>

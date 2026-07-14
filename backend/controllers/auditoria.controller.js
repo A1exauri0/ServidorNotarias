@@ -528,6 +528,94 @@ function extraerNotariaYVolumenDeRuta(rutaArchivo) {
     return { notaria, volumen };
 }
 
+// Realiza la consulta de registros no exportados y los envía a Astronmx
+async function ejecutarSincronizacionAstronmxInterno() {
+    // Consultar los registros que no han sido exportados (exportado = 0)
+    const [rows] = await dbPool.query(
+        'SELECT id, fecha_hora, turno, usuario, pc, ip, notaria, volumen, archivo, detalles, paginas, lugar_trabajo FROM `auditoria` WHERE exportado = 0 ORDER BY id ASC'
+    );
+
+    if (rows.length === 0) {
+        return { sincronizados: 0, mensaje: 'No hay registros pendientes.' };
+    }
+
+    // Mapear al formato JSON esperado por la API de Astronmx
+    const registrosFormateados = rows.map(r => ({
+        FechaHora: r.fecha_hora ? new Date(r.fecha_hora).toISOString().slice(0, 19).replace('T', ' ') : new Date().toISOString().slice(0, 19).replace('T', ' '),
+        Turno: r.turno || 'Matutino',
+        Usuario: r.usuario || 'Desconocido',
+        PC: r.pc || 'SERVIDOR-CENTRAL',
+        IP: r.ip || '127.0.0.1',
+        Notaria: r.notaria || 'General',
+        Lote: r.volumen || null,
+        ArchivoOriginal: r.archivo || null,
+        Detalles: r.detalles || 'Sincronizado automáticamente',
+        Paginas: r.paginas || 0,
+        LugarTrabajo: r.lugar_trabajo || 'IREC'
+    }));
+
+    // Enviar por HTTP POST a Astronmx usando fetch nativo de Node.js
+    const urlAstronmx = 'https://app.astronmx.cloud/api/digitalizacion/registrar';
+    const respuesta = await fetch(urlAstronmx, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ Registros: registrosFormateados })
+    });
+
+    if (!respuesta.ok) {
+        const errorTexto = await respuesta.text();
+        throw new Error(`Servidor Astronmx respondió con código ${respuesta.status}: ${errorTexto}`);
+    }
+
+    const datosRespuesta = await respuesta.json();
+
+    // Si la sincronización fue exitosa, marcar los registros como exportados en MySQL
+    const ahora = new Date();
+    const idsSincronizados = rows.map(r => r.id);
+
+    if (idsSincronizados.length > 0) {
+        await dbPool.query(
+            'UPDATE `auditoria` SET exportado = 1, exportado_en = ?, updated_at = NOW() WHERE id IN (?)',
+            [ahora, idsSincronizados]
+        );
+    }
+
+    return { sincronizados: idsSincronizados.length, servidorRespuesta: datosRespuesta };
+}
+
+// Endpoint HTTP para sincronización manual
+async function sincronizarAstronmx(req, res) {
+    try {
+        const resultado = await ejecutarSincronizacionAstronmxInterno();
+        if (resultado.sincronizados === 0) {
+            return res.json({ ok: true, mensaje: 'No hay registros pendientes de sincronizar.', sincronizados: 0 });
+        }
+        res.json({
+            ok: true,
+            mensaje: `Sincronización completada con éxito. Se enviaron ${resultado.sincronizados} registros a la nube.`,
+            sincronizados: resultado.sincronizados,
+            servidorRespuesta: resultado.servidorRespuesta
+        });
+    } catch (error) {
+        res.status(500).json({ ok: false, mensaje: 'Error al sincronizar con Astronmx: ' + error.message });
+    }
+}
+
+// Función silenciosa para ejecución automática cada hora (Cron/Interval)
+async function sincronizarAstronmxSilencioso() {
+    try {
+        const resultado = await ejecutarSincronizacionAstronmxInterno();
+        if (resultado.sincronizados > 0) {
+            console.log(`[AUTOSYNC] Sincronización automática completada: ${resultado.sincronizados} registros enviados a Astronmx.`);
+        }
+    } catch (error) {
+        console.error('[AUTOSYNC] Error en la sincronización automática con Astronmx:', error.message);
+    }
+}
+
 module.exports = {
     inicializarPool,
     registrarAuditoria,
@@ -535,5 +623,7 @@ module.exports = {
     obtenerRegistros,
     escanearDirectorio,
     importarArchivoPdf,
-    obtenerNotariasLocales
+    obtenerNotariasLocales,
+    sincronizarAstronmx,
+    sincronizarAstronmxSilencioso
 };

@@ -114,7 +114,18 @@ async function crearTablaUnica() {
 // Levantar el servidor Express
 app.listen(puerto, () => {
     console.log(`Servidor Express corriendo localmente en http://localhost:${puerto}`);
-    inicializarBaseDatos();
+    inicializarBaseDatos().then(() => {
+        // Programar sincronización automática silenciosa con Astronmx cada hora
+        const INTERVALO_UNA_HORA = 60 * 60 * 1000;
+        setInterval(async () => {
+            try {
+                await controladorAuditoria.sincronizarAstronmxSilencioso();
+            } catch (error) {
+                console.error('[CRON-ERROR] Error en el intervalo de sincronización:', error.message);
+            }
+        }, INTERVALO_UNA_HORA);
+        console.log('⏰ Programada sincronización automática con Astronmx cada hora.');
+    });
 });
 
 module.exports = app;
