@@ -108,7 +108,7 @@ async function registrarAuditoria(req, res) {
         const sqlInsert = `
                     INSERT INTO \`auditoria\` 
                     (fecha_hora, turno, usuario, pc, ip, notaria, volumen, archivo, detalles, paginas, exportado, exportado_en, lugar_trabajo, created_at, updated_at) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)
                 `;
 
         let notariaResolv =
@@ -135,7 +135,6 @@ async function registrarAuditoria(req, res) {
           archivo,
           reg.Detalles || reg.detalles || null,
           reg.Paginas || reg.paginas || 0,
-          ahora,
           reg.LugarTrabajo || reg.lugar_trabajo || null,
           ahora,
           ahora,
@@ -159,12 +158,10 @@ async function registrarAuditoria(req, res) {
       errores: errores.length > 0 ? errores : null,
     });
   } catch (err) {
-    res
-      .status(500)
-      .json({
-        ok: false,
-        mensaje: "Error interno en el servidor: " + err.message,
-      });
+    res.status(500).json({
+      ok: false,
+      mensaje: "Error interno en el servidor: " + err.message,
+    });
   } finally {
     conexion.release();
   }
@@ -251,11 +248,10 @@ async function subirPdf(req, res) {
         );
       }
     } else {
-      // Si el registro no existe en MySQL, lo insertamos
       const sqlInsert = `
                 INSERT INTO \`auditoria\` 
                 (fecha_hora, turno, usuario, pc, ip, notaria, volumen, archivo, detalles, paginas, exportado, exportado_en, lugar_trabajo, created_at, updated_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)
             `;
 
       const paramsInsert = [
@@ -269,7 +265,6 @@ async function subirPdf(req, res) {
         archivoOriginal,
         "Subido mediante API digitalizacion/subir-pdf",
         paginasFisicas,
-        ahora,
         "IREC",
         ahora,
         ahora,
@@ -302,12 +297,10 @@ async function subirPdf(req, res) {
         fs.unlinkSync(req.file.path);
       } catch (e) {}
     }
-    res
-      .status(500)
-      .json({
-        ok: false,
-        mensaje: "Error al procesar el archivo PDF: " + error.message,
-      });
+    res.status(500).json({
+      ok: false,
+      mensaje: "Error al procesar el archivo PDF: " + error.message,
+    });
   }
 }
 
@@ -331,12 +324,10 @@ async function obtenerRegistros(req, res) {
     const [rows] = await dbPool.query(querySql, queryParams);
     res.json({ ok: true, registros: rows });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        ok: false,
-        mensaje: "Error al consultar registros: " + error.message,
-      });
+    res.status(500).json({
+      ok: false,
+      mensaje: "Error al consultar registros: " + error.message,
+    });
   }
 }
 
@@ -370,7 +361,7 @@ async function obtenerNotariasLocales(req, res) {
 
           arbolNotarias.push({
             nombre: item,
-            volumenes: volumenes
+            volumenes: volumenes,
           });
         }
       } catch (e) {
@@ -380,12 +371,10 @@ async function obtenerNotariasLocales(req, res) {
 
     res.json({ ok: true, notarias: arbolNotarias });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        ok: false,
-        mensaje: "Error al listar notarias: " + error.message,
-      });
+    res.status(500).json({
+      ok: false,
+      mensaje: "Error al listar notarias: " + error.message,
+    });
   }
 }
 
@@ -394,23 +383,19 @@ async function escanearDirectorio(req, res) {
   try {
     const { notariaSeleccionada } = req.body;
     if (!notariaSeleccionada) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          mensaje: "Debe especificar la notaría a escanear.",
-        });
+      return res.status(400).json({
+        ok: false,
+        mensaje: "Debe especificar la notaría a escanear.",
+      });
     }
 
     const rutaDirectorio = path.join("C:\\NOTARIAS", notariaSeleccionada);
 
     if (!fs.existsSync(rutaDirectorio)) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          mensaje: `La ruta de la notaría no existe en el disco local: ${rutaDirectorio}`,
-        });
+      return res.status(400).json({
+        ok: false,
+        mensaje: `La ruta de la notaría no existe en el disco local: ${rutaDirectorio}`,
+      });
     }
 
     const archivosPdf = [];
@@ -454,12 +439,10 @@ async function escanearDirectorio(req, res) {
       resultados: listadoResultados,
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        ok: false,
-        mensaje: "Error al escanear directorio: " + error.message,
-      });
+    res.status(500).json({
+      ok: false,
+      mensaje: "Error al escanear directorio: " + error.message,
+    });
   }
 }
 
@@ -469,12 +452,10 @@ async function importarArchivoPdf(req, res) {
     const { rutaCompleta, archivo, notaria, volumen, usuario, turno, pc } =
       req.body;
     if (!rutaCompleta || !archivo) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          mensaje: "Datos insuficientes para la importación.",
-        });
+      return res.status(400).json({
+        ok: false,
+        mensaje: "Datos insuficientes para la importación.",
+      });
     }
 
     if (!fs.existsSync(rutaCompleta)) {
@@ -647,12 +628,10 @@ async function importarArchivoPdf(req, res) {
       accion: "registrado",
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        ok: false,
-        mensaje: `Error al importar archivo: ${error.message}`,
-      });
+    res.status(500).json({
+      ok: false,
+      mensaje: `Error al importar archivo: ${error.message}`,
+    });
   }
 }
 
@@ -793,12 +772,10 @@ async function sincronizarAstronmx(req, res) {
       servidorRespuesta: resultado.servidorRespuesta,
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        ok: false,
-        mensaje: "Error al sincronizar con Astronmx: " + error.message,
-      });
+    res.status(500).json({
+      ok: false,
+      mensaje: "Error al sincronizar con Astronmx: " + error.message,
+    });
   }
 }
 

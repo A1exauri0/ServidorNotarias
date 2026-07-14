@@ -395,7 +395,7 @@ async function ejecutarTransferenciaMasiva() {
           }
         }
         if (labelEstado) {
-          labelEstado.textContent = `✔ Completo (${datos.paginas} pág.)`;
+          labelEstado.textContent = `✔ Registrado (${datos.paginas} pág.)`;
           labelEstado.style.color = "";
         }
       } else {
