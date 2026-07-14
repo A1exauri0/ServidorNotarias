@@ -49,6 +49,10 @@
 
                 <!-- Separador de Operaciones -->
                 <div class="menu-separador-titulo texto-menu" style="margin: 15px 0 5px 15px; font-size: 11px; text-transform: uppercase; color: var(--color-texto-secundario); font-weight: 600; opacity: 0.8; letter-spacing: 0.5px;">Operaciones</div>
+                <button class="nav-item-accion" id="btnMenuConsultarUsuario" style="display: flex; width: 100%; align-items: center; gap: 12px; background: transparent; border: none; padding: 12px 20px; font-size: 14px; color: var(--color-texto-secundario); cursor: pointer; transition: all 0.2s ease;">
+                    <iconify-icon icon="mdi:account-search" class="icono-menu" style="color: #3a6ac9; font-size: 20px;"></iconify-icon>
+                    <span class="texto-menu">Consulta por Usuario</span>
+                </button>
                 <button class="nav-item-accion" id="btnExportarExcelRegistros" style="display: flex; width: 100%; align-items: center; gap: 12px; background: transparent; border: none; padding: 12px 20px; font-size: 14px; color: var(--color-texto-secundario); cursor: pointer; transition: all 0.2s ease;">
                     <iconify-icon icon="mdi:microsoft-excel" class="icono-menu" style="color: #2ebd75; font-size: 20px;"></iconify-icon>
                     <span class="texto-menu">Exportar a Excel</span>
@@ -81,11 +85,15 @@
                     <div class="filtros-fecha">
                         <div class="campo-fecha">
                             <label for="fechaInicio">Inicio:</label>
-                            <input type="date" id="fechaInicio">
+                            <div class="custom-datepicker">
+                                <input type="text" id="fechaInicio" class="filtro-fecha-input input-datepicker" readonly style="height: 38px;">
+                            </div>
                         </div>
                         <div class="campo-fecha">
                             <label for="fechaFin">Fin:</label>
-                            <input type="date" id="fechaFin">
+                            <div class="custom-datepicker">
+                                <input type="text" id="fechaFin" class="filtro-fecha-input input-datepicker" readonly style="height: 38px;">
+                            </div>
                         </div>
                         <button id="btnFiltrar" class="btn-filtrar">
                             <iconify-icon icon="mdi:magnify" style="vertical-align: middle; margin-right: 4px;"></iconify-icon>Aplicar
@@ -123,11 +131,15 @@
                     <div style="display: flex; gap: 15px; margin-bottom: 20px;">
                         <div class="campo-formulario" style="flex: 1;">
                             <label for="excelFechaInicio">Fecha Inicio:</label>
-                            <input type="date" id="excelFechaInicio" required class="filtro-select" style="width: 100%; height: 38px;">
+                            <div class="custom-datepicker" style="width: 100%;">
+                                <input type="text" id="excelFechaInicio" required class="filtro-fecha-input input-datepicker" readonly style="width: 100%; height: 38px;">
+                            </div>
                         </div>
                         <div class="campo-formulario" style="flex: 1;">
                             <label for="excelFechaFin">Fecha Fin:</label>
-                            <input type="date" id="excelFechaFin" required class="filtro-select" style="width: 100%; height: 38px;">
+                            <div class="custom-datepicker" style="width: 100%;">
+                                <input type="text" id="excelFechaFin" required class="filtro-fecha-input input-datepicker" readonly style="width: 100%; height: 38px;">
+                            </div>
                         </div>
                     </div>
                     <div class="modal-acciones" style="display: flex; justify-content: flex-end; gap: 10px;">
@@ -164,8 +176,58 @@
         </div>
     </div>
 
+    <!-- Modal de Consulta de Productividad por Usuario (Global) -->
+    <div id="modalConsultaProductividad" class="modal-superpuesto" style="display: none;">
+        <div class="modal-contenido" style="width: 400px;">
+            <div class="modal-cabecera">
+                <h3>Consultar Productividad</h3>
+                <button type="button" id="btnCerrarModalConsulta" class="btn-icono-top">
+                    <iconify-icon icon="mdi:close"></iconify-icon>
+                </button>
+            </div>
+            <div class="modal-cuerpo" style="padding-top: 15px;">
+                <form id="formConsultaUsuario">
+                    <div class="campo-formulario" style="margin-bottom: 15px;">
+                        <label for="cboConsultaUsuario">Seleccionar Usuario:</label>
+                        <select id="cboConsultaUsuario" required class="filtro-select" style="width: 100%; height: 38px; padding: 0 10px;"></select>
+                    </div>
+                    <div class="campo-formulario" style="margin-bottom: 20px;">
+                        <label for="txtConsultaFecha">Seleccionar Fecha:</label>
+                        <div class="custom-datepicker" style="width: 100%;">
+                            <input type="text" id="txtConsultaFecha" required class="filtro-fecha-input input-datepicker" readonly style="width: 100%; height: 38px; padding: 0 10px;">
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn-filtrar" style="width: 100%; background-color: #2ebd75; border-color: #2ebd75; color: white; height: 40px; font-weight: 600; font-size: 14px; margin-bottom: 25px;">
+                        <iconify-icon icon="mdi:magnify" style="vertical-align: middle; margin-right: 6px;"></iconify-icon>Consultar
+                    </button>
+                </form>
+
+                <!-- Panel de Resultados (Estilo FormConsultaProductividad de C#) -->
+                <div id="panelResultadosConsulta" style="border: 1px solid var(--color-tarjeta-borde); border-radius: 12px; padding: 15px; background-color: rgba(10, 10, 12, 0.2); display: none;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 13px; color: var(--color-texto-secundario); text-transform: uppercase; letter-spacing: 0.5px;">Resultados de Búsqueda</h4>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="font-size: 13px; color: var(--color-texto-secundario); display: flex; align-items: center; gap: 6px;">
+                            <iconify-icon icon="mdi:file-pdf-box" style="font-size: 18px; color: #3a6ac9;"></iconify-icon> PDFs Trabajados:
+                        </span>
+                        <span id="lblResultadoPdfs" style="font-size: 16px; font-weight: bold; color: var(--color-texto);">0</span>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 13px; color: var(--color-texto-secundario); display: flex; align-items: center; gap: 6px;">
+                            <iconify-icon icon="mdi:image-outline" style="font-size: 18px; color: #2ebd75;"></iconify-icon> Total de Imágenes:
+                        </span>
+                        <span id="lblResultadoImagenes" style="font-size: 16px; font-weight: bold; color: var(--color-texto);">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- JS de la App -->
     <script src="../src/js/tema.js"></script>
+    <script src="../src/js/datepicker.js"></script>
     <script src="../src/js/usuarios.js"></script>
     <script src="../src/js/productividad.js"></script>
     <script src="../src/js/importar.js"></script>

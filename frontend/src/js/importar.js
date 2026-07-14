@@ -283,7 +283,7 @@ async function cargarArchivosDeVolumen(
               ${chkChecked ? "checked" : ""}
               style="cursor: ${deshabilitado ? "not-allowed" : "pointer"}; margin-right: 4px;">
             <iconify-icon icon="mdi:file-pdf-box" style="color: #e84b3c; font-size: 16px; vertical-align: middle;"></iconify-icon>
-            <span style="font-weight: 500; font-size: 12.5px; color: #17233d; word-break: break-all;">${item.archivo}</span>
+            <span style="font-weight: 500; font-size: 12.5px; color: var(--color-texto); word-break: break-all;">${item.archivo}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 10px; font-size: 11.5px; font-weight: 600; white-space: nowrap;">
             <span style="color: var(--color-texto-secundario); font-family: monospace;">${item.tamanioMb.toFixed(1)} MB</span>

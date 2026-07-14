@@ -44,6 +44,11 @@ body {
     color: var(--color-texto-principal);
     font-family: var(--tipografia-cuerpo);
     overflow: hidden;
+    color-scheme: dark; /* Forzar el diseño nativo de inputs/widgets en modo oscuro */
+}
+
+body.tema-claro {
+    color-scheme: light; /* Forzar el diseño nativo de inputs/widgets en modo claro */
 }
 
 /* Contenedor principal */
@@ -830,5 +835,185 @@ body.tema-claro .tabla-plana tbody tr:hover {
     color: var(--color-primario);
     font-weight: 600;
 }
+
+/* Scrollbar Personalizado Premium Global */
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+}
+
+body.tema-claro ::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.22);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-primario);
+}
+
+/* Scroll especial para las opciones del custom select */
+.custom-select-options::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+/* Estilo para los selectores de fechas input type="date" */
+.filtro-fecha-input {
+    background-color: var(--color-tarjeta);
+    border: 1px solid var(--color-tarjeta-borde);
+    color: var(--color-texto-principal);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-family: var(--tipografia-cuerpo);
+    font-size: 13.5px;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+}
+
+.filtro-fecha-input:hover {
+    border-color: var(--color-primario);
+}
+
+.filtro-fecha-input:focus {
+    border-color: var(--color-primario);
+    background-color: var(--color-tarjeta);
+    box-shadow: 0 0 0 3px rgba(58, 106, 201, 0.15);
+}
+
+/* Datepicker Personalizado Premium */
+.custom-datepicker {
+    position: relative;
+    display: inline-block;
+}
+
+.input-datepicker {
+    cursor: pointer;
+    width: 110px;
+    min-width: 110px;
+    text-align: center;
+}
+
+.datepicker-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 270px;
+    background-color: var(--color-tarjeta);
+    border: 1px solid var(--color-tarjeta-borde);
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    z-index: 2100;
+    user-select: none;
+    animation: fadeInModal 0.15s ease-out;
+}
+
+/* Alinear a la derecha si está pegado al borde derecho de la pantalla */
+.custom-datepicker.alinear-derecha .datepicker-popover {
+    left: auto;
+    right: 0;
+}
+
+.datepicker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.datepicker-header button {
+    background: transparent;
+    border: 1px solid var(--color-tarjeta-borde);
+    color: var(--color-texto-secundario);
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    transition: all 0.15s;
+}
+
+.datepicker-header button:hover {
+    border-color: var(--color-primario);
+    color: var(--color-texto-principal);
+    background-color: var(--color-tarjeta-borde);
+}
+
+.datepicker-mes-anio {
+    font-family: var(--tipografia-titulos);
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--color-texto-principal);
+}
+
+.datepicker-dias-semana {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--color-texto-secundario);
+    margin-bottom: 6px;
+    opacity: 0.7;
+}
+
+.datepicker-cuadricula-dias {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    row-gap: 3px;
+    column-gap: 3px;
+}
+
+.datepicker-dia {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--color-texto-principal);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.1s;
+}
+
+.datepicker-dia:hover:not(.deshabilitado) {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+body.tema-claro .datepicker-dia:hover:not(.deshabilitado) {
+    background-color: rgba(0, 0, 0, 0.06);
+}
+
+.datepicker-dia.otro-mes {
+    color: var(--color-texto-secundario);
+    opacity: 0.35;
+}
+
+.datepicker-dia.seleccionado {
+    background-color: var(--color-primario) !important;
+    color: #ffffff !important;
+    font-weight: bold;
+}
+
+.datepicker-dia.hoy {
+    border: 1px dashed var(--color-primario);
+    font-weight: bold;
+    color: var(--color-primario);
+}
+
 
 

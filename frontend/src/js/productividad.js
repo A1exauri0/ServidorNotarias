@@ -1,49 +1,34 @@
 /**
  * JS Modular para el Reporte de Productividad Diaria por Capturista (productividad.js).
- * Controla el listado estilo hoja de cálculo, la consulta interactiva y la exportación.
+ * Controla el listado consolidado ordenado por turno, la consulta global por usuario y la exportación.
  */
 
 let listaReporteLocal = [];
 
-async function inicializarVistaProductividad() {
-    // 1. Vincular botón de exportación a Excel
-    const btnExcel = document.getElementById('btnExportarExcelProd');
-    if (btnExcel && !btnExcel.dataset.listener) {
-        btnExcel.dataset.listener = 'true';
-        btnExcel.addEventListener('click', exportarProductividadExcel);
+// Inicialización global al cargar el documento (para la opción del menú lateral persistente)
+document.addEventListener("DOMContentLoaded", () => {
+    // 1. Vincular botón del menú lateral
+    const btnMenuConsulta = document.getElementById('btnMenuConsultarUsuario');
+    if (btnMenuConsulta) {
+        btnMenuConsulta.addEventListener('click', abrirModalConsultaUsuario);
     }
 
-    // 2. Vincular filtro local por Día
-    const filtroDia = document.getElementById('filtroDiaProductividad');
-    if (filtroDia && !filtroDia.dataset.listener) {
-        filtroDia.dataset.listener = 'true';
-        filtroDia.addEventListener('change', () => {
-            renderizarTablaProductividad();
-        });
-    }
-
-    // 3. Vincular botón para abrir el modal de Consulta de Usuario
-    const btnConsulta = document.getElementById('btnConsultarPorUsuario');
-    if (btnConsulta && !btnConsulta.dataset.listener) {
-        btnConsulta.dataset.listener = 'true';
-        btnConsulta.addEventListener('click', abrirModalConsultaUsuario);
-    }
-
-    // 4. Vincular eventos de cierre del modal de consulta
+    // 2. Vincular eventos de cierre del modal de consulta
     const btnCerrar = document.getElementById('btnCerrarModalConsulta');
-    if (btnCerrar && !btnCerrar.dataset.listener) {
-        btnCerrar.dataset.listener = 'true';
+    if (btnCerrar) {
         btnCerrar.addEventListener('click', cerrarModalConsultaUsuario);
     }
 
-    // 5. Vincular formulario de consulta por usuario
+    // 3. Vincular formulario de consulta por usuario
     const formConsulta = document.getElementById('formConsultaUsuario');
-    if (formConsulta && !formConsulta.dataset.listener) {
-        formConsulta.dataset.listener = 'true';
+    if (formConsulta) {
         formConsulta.addEventListener('submit', procesarConsultaUsuario);
     }
+});
 
-    // 6. Realizar la primera carga de datos con las fechas del header global
+// Inicialización específica al abrir la pestaña de Productividad
+async function inicializarVistaProductividad() {
+    listaReporteLocal = [];
     await cargarReporteProductividad();
 }
 
@@ -58,7 +43,7 @@ async function cargarReporteProductividad() {
 
     const tbody = document.getElementById('tablaProductividadBody');
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--color-texto-secundario); padding: 25px;">Cargando reporte de productividad diaria...</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-texto-secundario); padding: 25px;">Cargando reporte de productividad diaria...</td></tr>`;
     }
 
     try {
@@ -75,33 +60,42 @@ async function cargarReporteProductividad() {
     } catch (error) {
         console.error('Error al cargar reporte de productividad:', error);
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #eb5584; padding: 25px;">Error al conectar con la base de datos local.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #eb5584; padding: 25px;">Error al conectar con la base de datos local.</td></tr>`;
         }
     }
 }
 
-// Renderiza las filas en la tabla estilo hoja de cálculo contemplando el filtro por día local
+// Renderiza las filas en la tabla ordenadas jerárquicamente por turno
 function renderizarTablaProductividad() {
     const tbody = document.getElementById('tablaProductividadBody');
     if (!tbody) return;
 
     tbody.innerHTML = '';
 
-    const filtroDiaInput = document.getElementById('filtroDiaProductividad');
-    const valorDiaFiltrado = filtroDiaInput ? filtroDiaInput.value : '';
-
-    // Filtrar los datos localmente si se seleccionó un día específico
-    const datosAMostrar = listaReporteLocal.filter(item => {
-        if (!valorDiaFiltrado) return true;
-        return item.fecha === valorDiaFiltrado;
-    });
-
-    if (datosAMostrar.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--color-texto-secundario); padding: 30px;">No se encontraron registros de captura para el filtro seleccionado.</td></tr>`;
+    if (listaReporteLocal.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-texto-secundario); padding: 30px;">No se encontraron registros de captura para el rango seleccionado.</td></tr>`;
         return;
     }
 
-    datosAMostrar.forEach((item) => {
+    // Orden jerárquico fijo de los turnos para evitar registros mezclados
+    const ORDEN_TURNOS = {
+        "matutino": 1,
+        "vespertino": 2,
+        "nocturno": 3
+    };
+
+    // Ordenar los registros por Turno, y secundariamente por Capturista
+    const registrosOrdenados = [...listaReporteLocal].sort((a, b) => {
+        const pesoA = ORDEN_TURNOS[(a.turno || 'Matutino').toLowerCase()] || 99;
+        const pesoB = ORDEN_TURNOS[(b.turno || 'Matutino').toLowerCase()] || 99;
+        
+        if (pesoA !== pesoB) {
+            return pesoA - pesoB;
+        }
+        return (a.usuario || '').localeCompare(b.usuario || '');
+    });
+
+    registrosOrdenados.forEach((item) => {
         const fila = document.createElement('tr');
         
         // Formatear la fecha a visual estándar (dd/mm/yyyy)
@@ -112,7 +106,7 @@ function renderizarTablaProductividad() {
         } catch (e) {}
 
         // Determinar color de fondo según el turno
-        let colorFondo = '#F2F2F2'; // Gris
+        let colorFondo = '#F2F2F2';
         const turnoLower = (item.turno || 'Matutino').toLowerCase();
         if (turnoLower === 'matutino') {
             colorFondo = '#FFF2CC'; // Amarillo pastel
@@ -122,7 +116,6 @@ function renderizarTablaProductividad() {
             colorFondo = '#DDEBF7'; // Azul pastel
         }
 
-        // Aplicar el color de fondo y forzar texto oscuro para que resalte en cualquier tema (claro/oscuro)
         fila.style.backgroundColor = colorFondo;
         fila.style.color = '#17233d';
 
@@ -137,7 +130,7 @@ function renderizarTablaProductividad() {
     });
 }
 
-// Abre el modal de consulta por usuario
+// Abre el modal de consulta por usuario de forma global
 function abrirModalConsultaUsuario() {
     const modal = document.getElementById('modalConsultaProductividad');
     if (!modal) return;
@@ -146,20 +139,29 @@ function abrirModalConsultaUsuario() {
     const panel = document.getElementById('panelResultadosConsulta');
     if (panel) panel.style.display = 'none';
 
-    // Poblar dropdown con usuarios únicos existentes
+    // Poblar dropdown con usuarios únicos de la sesión actual
     const cbo = document.getElementById('cboConsultaUsuario');
     if (cbo) {
         cbo.innerHTML = '';
+        // Si la lista local está vacía, intentar obtener todos los usuarios del sistema
         const usuariosUnicos = [...new Set(listaReporteLocal.map(item => item.usuario))].sort();
-        usuariosUnicos.forEach(u => {
+        
+        if (usuariosUnicos.length > 0) {
+            usuariosUnicos.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u;
+                opt.innerText = u;
+                cbo.appendChild(opt);
+            });
+        } else {
+            // Fallback si el admin abre el modal desde otra vista
             const opt = document.createElement('option');
-            opt.value = u;
-            opt.innerText = u;
+            opt.innerText = "Carga la pestaña productividad primero";
             cbo.appendChild(opt);
-        });
+        }
     }
 
-    // Poner fecha de hoy por defecto
+    // Poner fecha de hoy por defecto en el input
     const inputFecha = document.getElementById('txtConsultaFecha');
     if (inputFecha) {
         const hoy = new Date();
@@ -211,50 +213,6 @@ function procesarConsultaUsuario(e) {
     if (panel) {
         panel.style.display = 'block';
     }
-}
-
-// Genera un archivo CSV compatible con Excel agregando el BOM UTF-8
-function exportarProductividadExcel() {
-    if (listaReporteLocal.length === 0) {
-        alert('No hay información en el reporte para exportar.');
-        return;
-    }
-
-    const separador = ';';
-    const cabeceras = ['Capturista', 'Turno', 'Fecha de Registro', 'Total de PDFs', 'Total de Imagenes (Paginas)'];
-    
-    let contenidoCsv = cabeceras.join(separador) + '\n';
-
-    listaReporteLocal.forEach(item => {
-        let fechaVisual = item.fecha;
-        try {
-            const partes = item.fecha.split('-');
-            fechaVisual = `${partes[2]}/${partes[1]}/${partes[0]}`;
-        } catch (e) {}
-
-        const fila = [
-            item.usuario,
-            item.turno || 'Matutino',
-            fechaVisual,
-            item.total_pdfs,
-            item.total_paginas
-        ];
-        contenidoCsv += fila.join(separador) + '\n';
-    });
-
-    const blob = new Blob(['\uFEFF' + contenidoCsv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    
-    const enlaceDescarga = document.createElement('a');
-    enlaceDescarga.href = url;
-    
-    const fechaInicio = document.getElementById('fechaInicio')?.value || 'inicio';
-    const fechaFin = document.getElementById('fechaFin')?.value || 'fin';
-    enlaceDescarga.setAttribute('download', `Productividad_Captura_${fechaInicio}_al_${fechaFin}.csv`);
-    
-    document.body.appendChild(enlaceDescarga);
-    enlaceDescarga.click();
-    document.body.removeChild(enlaceDescarga);
 }
 
 // Exponer la función de inicialización a window para que funcione con el cargador de vistas de app.js

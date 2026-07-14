@@ -6,24 +6,6 @@
                 <h3>Reporte de Productividad Diaria</h3>
                 <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--color-texto-secundario);">Muestra el rendimiento consolidado por capturista y fecha</p>
             </div>
-            
-            <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
-                <!-- Filtro por Día (Local) -->
-                <div style="display: flex; align-items: center; gap: 5px;">
-                    <label for="filtroDiaProductividad" style="font-size: 12px; font-weight: 600; color: var(--color-texto-secundario);">Día:</label>
-                    <input type="date" id="filtroDiaProductividad" class="filtro-select" style="height: 38px; padding: 0 10px;">
-                </div>
-
-                <!-- Botón Consultar por Usuario -->
-                <button id="btnConsultarPorUsuario" class="btn-filtrar" style="background-color: #3a6ac9; border-color: #3a6ac9; color: white; font-weight: 600; height: 38px; padding: 0 16px;">
-                    <iconify-icon icon="mdi:account-search" style="vertical-align: middle; margin-right: 6px; font-size: 16px;"></iconify-icon>🔎 Consultar por Usuario
-                </button>
-
-                <!-- Botón de Excel estilo App C# -->
-                <button id="btnExportarExcelProd" class="btn-filtrar" style="background-color: #2ebd75; border-color: #2ebd75; color: white; font-weight: 600; height: 38px; padding: 0 16px;">
-                    <iconify-icon icon="mdi:microsoft-excel" style="vertical-align: middle; margin-right: 6px; font-size: 16px;"></iconify-icon>📊 Exportar Excel
-                </button>
-            </div>
         </div>
 
         <div class="tabla-scroll">
@@ -41,53 +23,6 @@
                     <!-- Filas inyectadas por JS -->
                 </tbody>
             </table>
-        </div>
-    </div>
-
-    <!-- Modal de Consulta de Productividad por Usuario -->
-    <div id="modalConsultaProductividad" class="modal-superpuesto" style="display: none;">
-        <div class="modal-contenido" style="width: 400px;">
-            <div class="modal-cabecera">
-                <h3>Consultar Productividad</h3>
-                <button type="button" id="btnCerrarModalConsulta" class="btn-icono-top">
-                    <iconify-icon icon="mdi:close"></iconify-icon>
-                </button>
-            </div>
-            <div class="modal-cuerpo" style="padding-top: 15px;">
-                <form id="formConsultaUsuario">
-                    <div class="campo-formulario" style="margin-bottom: 15px;">
-                        <label for="cboConsultaUsuario">Seleccionar Usuario:</label>
-                        <select id="cboConsultaUsuario" required class="filtro-select" style="width: 100%; height: 38px; padding: 0 10px;"></select>
-                    </div>
-                    <div class="campo-formulario" style="margin-bottom: 20px;">
-                        <label for="txtConsultaFecha">Seleccionar Fecha:</label>
-                        <input type="date" id="txtConsultaFecha" required class="filtro-select" style="width: 100%; height: 38px; padding: 0 10px;">
-                    </div>
-                    
-                    <button type="submit" class="btn-filtrar" style="width: 100%; background-color: #2ebd75; border-color: #2ebd75; color: white; height: 40px; font-weight: 600; font-size: 14px; margin-bottom: 25px;">
-                        <iconify-icon icon="mdi:magnify" style="vertical-align: middle; margin-right: 6px;"></iconify-icon>Consultar
-                    </button>
-                </form>
-
-                <!-- Panel de Resultados (Estilo FormConsultaProductividad de C#) -->
-                <div id="panelResultadosConsulta" style="border: 1px solid var(--color-tarjeta-borde); border-radius: 12px; padding: 15px; background-color: rgba(10, 10, 12, 0.2); display: none;">
-                    <h4 style="margin: 0 0 12px 0; font-size: 13px; color: var(--color-texto-secundario); text-transform: uppercase; letter-spacing: 0.5px;">Resultados de Búsqueda</h4>
-                    
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <span style="font-size: 13px; color: var(--color-texto-secundario); display: flex; align-items: center; gap: 6px;">
-                            <iconify-icon icon="mdi:file-pdf-box" style="font-size: 18px; color: #3a6ac9;"></iconify-icon> PDFs Trabajados:
-                        </span>
-                        <span id="lblResultadoPdfs" style="font-size: 16px; font-weight: bold; color: var(--color-texto);">0</span>
-                    </div>
-
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 13px; color: var(--color-texto-secundario); display: flex; align-items: center; gap: 6px;">
-                            <iconify-icon icon="mdi:image-outline" style="font-size: 18px; color: #2ebd75;"></iconify-icon> Total de Imágenes:
-                        </span>
-                        <span id="lblResultadoImagenes" style="font-size: 16px; font-weight: bold; color: var(--color-texto);">0</span>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 </div>
