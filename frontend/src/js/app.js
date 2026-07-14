@@ -40,8 +40,14 @@ document.addEventListener("DOMContentLoaded", () => {
     btnActualizar.addEventListener("click", () => {
       if (vistaActual === "dashboard") {
         consultarEstadisticas();
-      } else {
+      } else if (vistaActual === "registros") {
         cargarTablaRegistros();
+      } else if (vistaActual === "usuarios") {
+        inicializarVistaUsuarios();
+      } else if (vistaActual === "productividad") {
+        inicializarVistaProductividad();
+      } else if (vistaActual === "importar") {
+        inicializarVistaImportar();
       }
     });
   }
@@ -57,6 +63,73 @@ document.addEventListener("DOMContentLoaded", () => {
       cargarVista(tabDestino);
     });
   });
+
+  // Vincular evento de Sincronización con Astronmx (Global)
+  const btnSinc = document.getElementById("btnSincronizarAstronmx");
+  if (btnSinc) {
+    btnSinc.addEventListener("click", () => {
+      const modal = document.getElementById("modalSincronizarAstronmx");
+      if (modal) {
+        document.getElementById("panelProgresoSinc").style.display = "none";
+        document.getElementById("btnConfirmarSinc").disabled = false;
+        document.getElementById("btnCancelarSinc").disabled = false;
+        modal.style.display = "flex";
+      }
+    });
+  }
+
+  const btnCerrarSinc = document.getElementById("btnCerrarModalSinc");
+  const btnCancelarSinc = document.getElementById("btnCancelarSinc");
+  const modalSinc = document.getElementById("modalSincronizarAstronmx");
+
+  const cerrarModalSinc = () => {
+    if (modalSinc) modalSinc.style.display = "none";
+  };
+
+  if (btnCerrarSinc) btnCerrarSinc.addEventListener("click", cerrarModalSinc);
+  if (btnCancelarSinc)
+    btnCancelarSinc.addEventListener("click", cerrarModalSinc);
+
+  const btnConfirmarSinc = document.getElementById("btnConfirmarSinc");
+  if (btnConfirmarSinc) {
+    btnConfirmarSinc.addEventListener("click", async () => {
+      btnConfirmarSinc.disabled = true;
+      document.getElementById("btnCancelarSinc").disabled = true;
+      document.getElementById("panelProgresoSinc").style.display = "block";
+
+      try {
+        const respuesta = await fetch(
+          "http://localhost:3000/api/sincronizar-astronmx",
+          {
+            method: "POST",
+          },
+        );
+        const datos = await respuesta.json();
+
+        if (datos.ok) {
+          alert(datos.mensaje);
+          if (vistaActual === "registros") {
+            cargarTablaRegistros(); // Refrescar si estamos viendo la tabla
+          }
+        } else {
+          alert("⚠️ " + datos.mensaje);
+        }
+      } catch (error) {
+        console.error("Error al sincronizar con Astronmx:", error);
+        alert(
+          "❌ No se pudo conectar con el servidor local para la sincronización.",
+        );
+      } finally {
+        cerrarModalSinc();
+      }
+    });
+  }
+
+  // Vincular evento de exportación de registros detallados a Excel (Global)
+  const btnExportarExcel = document.getElementById("btnExportarExcelRegistros");
+  if (btnExportarExcel) {
+    btnExportarExcel.addEventListener("click", exportarRegistrosExcel);
+  }
 });
 
 // Carga dinámica de sub-vistas HTML
@@ -75,12 +148,15 @@ async function cargarVista(nombreVista) {
     // Inicializadores y configuración de encabezado según la vista activa
     if (nombreVista === "dashboard") {
       if (elTitulo) elTitulo.innerText = "Resumen de Productividad";
-      if (elSubtitulo) elSubtitulo.innerText = "Monitoreo y KPIs locales en tiempo real";
+      if (elSubtitulo)
+        elSubtitulo.innerText = "Monitoreo y KPIs locales en tiempo real";
       if (elFiltrosFecha) elFiltrosFecha.style.display = "flex";
       consultarEstadisticas();
     } else if (nombreVista === "registros") {
       if (elTitulo) elTitulo.innerText = "Registros de Auditoría";
-      if (elSubtitulo) elSubtitulo.innerText = "Listado detallado de capturas físicas procesadas";
+      if (elSubtitulo)
+        elSubtitulo.innerText =
+          "Listado detallado de capturas físicas procesadas";
       if (elFiltrosFecha) elFiltrosFecha.style.display = "flex";
       cargarTablaRegistros();
 
@@ -93,77 +169,27 @@ async function cargarVista(nombreVista) {
         });
       }
 
-      // Vincular evento de exportación de registros detallados a Excel
-      const btnExportarExcel = document.getElementById("btnExportarExcelRegistros");
-      if (btnExportarExcel) {
-        btnExportarExcel.addEventListener("click", exportarRegistrosExcel);
-      }
-
-      // Vincular evento de Sincronización con Astronmx (Estilo app C#)
-      const btnSinc = document.getElementById("btnSincronizarAstronmx");
-      if (btnSinc) {
-        btnSinc.addEventListener("click", () => {
-          const modal = document.getElementById("modalSincronizarAstronmx");
-          if (modal) {
-            document.getElementById("panelProgresoSinc").style.display = "none";
-            document.getElementById("btnConfirmarSinc").disabled = false;
-            document.getElementById("btnCancelarSinc").disabled = false;
-            modal.style.display = "flex";
-          }
-        });
-      }
-
-      const btnCerrarSinc = document.getElementById("btnCerrarModalSinc");
-      const btnCancelarSinc = document.getElementById("btnCancelarSinc");
-      const modalSinc = document.getElementById("modalSincronizarAstronmx");
-
-      const cerrarModalSinc = () => {
-        if (modalSinc) modalSinc.style.display = "none";
-      };
-
-      if (btnCerrarSinc) btnCerrarSinc.addEventListener("click", cerrarModalSinc);
-      if (btnCancelarSinc) btnCancelarSinc.addEventListener("click", cerrarModalSinc);
-
-      const btnConfirmarSinc = document.getElementById("btnConfirmarSinc");
-      if (btnConfirmarSinc) {
-        btnConfirmarSinc.addEventListener("click", async () => {
-          btnConfirmarSinc.disabled = true;
-          document.getElementById("btnCancelarSinc").disabled = true;
-          document.getElementById("panelProgresoSinc").style.display = "block";
-
-          try {
-            const respuesta = await fetch("http://localhost:3000/api/sincronizar-astronmx", {
-              method: "POST"
-            });
-            const datos = await respuesta.json();
-
-            if (datos.ok) {
-              alert(datos.mensaje);
-              cargarTablaRegistros(); // Refrescar la tabla para ver cambios
-            } else {
-              alert("⚠️ " + datos.mensaje);
-            }
-          } catch (error) {
-            console.error("Error al sincronizar con Astronmx:", error);
-            alert("❌ No se pudo conectar con el servidor local para la sincronización.");
-          } finally {
-            cerrarModalSinc();
-          }
-        });
-      }
+      // El listado de registros se recarga de forma ordinaria
+      cargarTablaRegistros();
     } else if (nombreVista === "usuarios") {
       if (elTitulo) elTitulo.innerText = "Administrar Usuarios";
-      if (elSubtitulo) elSubtitulo.innerText = "Configuración y gestión de credenciales y accesos";
+      if (elSubtitulo)
+        elSubtitulo.innerText =
+          "Configuración y gestión de credenciales y accesos";
       if (elFiltrosFecha) elFiltrosFecha.style.display = "none";
       inicializarVistaUsuarios();
     } else if (nombreVista === "productividad") {
       if (elTitulo) elTitulo.innerText = "Productividad por Capturista";
-      if (elSubtitulo) elSubtitulo.innerText = "Reporte consolidado diario del rendimiento de los usuarios";
+      if (elSubtitulo)
+        elSubtitulo.innerText =
+          "Reporte consolidado diario del rendimiento de los usuarios";
       if (elFiltrosFecha) elFiltrosFecha.style.display = "flex";
       inicializarVistaProductividad();
     } else if (nombreVista === "importar") {
       if (elTitulo) elTitulo.innerText = "Transferir Archivos PDF";
-      if (elSubtitulo) elSubtitulo.innerText = "Importar y registrar PDFs desde carpetas locales o de red";
+      if (elSubtitulo)
+        elSubtitulo.innerText =
+          "Importar y registrar PDFs desde carpetas locales o de red";
       if (elFiltrosFecha) elFiltrosFecha.style.display = "none";
       inicializarVistaImportar();
     }
@@ -240,7 +266,7 @@ function actualizarKpisYGraficas(datos) {
   datos.notarias.forEach((item) => {
     const notariaNombre = (item.notaria || "").toUpperCase().trim();
     const volumenNombre =
-      (item.volumen || "").toUpperCase().trim() || "SIN LOTE";
+      (item.volumen || "").toUpperCase().trim() || "SIN VOLUMEN";
     const claveVolumen = `${notariaNombre} - ${volumenNombre}`;
 
     // Agrupación por Notaría
@@ -656,9 +682,9 @@ function filtrarYRenderizarTabla(termino) {
 
 // Abre el modal para seleccionar el rango de fechas antes de generar el Excel premium
 function exportarRegistrosExcel() {
-  const modal = document.getElementById("modalRangoExcel");
+  const modal = document.getElementById("modalRangoFechaExcel");
   if (!modal) {
-    alert("Error: No se encontró el modalRangoExcel en el HTML.");
+    alert("Error: No se encontró el modalRangoFechaExcel en el HTML.");
     return;
   }
 

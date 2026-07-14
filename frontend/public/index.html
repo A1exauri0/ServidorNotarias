@@ -46,6 +46,17 @@
                     <iconify-icon icon="mdi:folder-upload-outline" class="icono-menu"></iconify-icon>
                     <span class="texto-menu">Transferir PDFs</span>
                 </button>
+
+                <!-- Separador de Operaciones -->
+                <div class="menu-separador-titulo texto-menu" style="margin: 15px 0 5px 15px; font-size: 11px; text-transform: uppercase; color: var(--color-texto-secundario); font-weight: 600; opacity: 0.8; letter-spacing: 0.5px;">Operaciones</div>
+                <button class="nav-item-accion" id="btnExportarExcelRegistros" style="display: flex; width: 100%; align-items: center; gap: 12px; background: transparent; border: none; padding: 12px 20px; font-size: 14px; color: var(--color-texto-secundario); cursor: pointer; transition: all 0.2s ease;">
+                    <iconify-icon icon="mdi:microsoft-excel" class="icono-menu" style="color: #2ebd75; font-size: 20px;"></iconify-icon>
+                    <span class="texto-menu">Exportar a Excel</span>
+                </button>
+                <button class="nav-item-accion" id="btnSincronizarAstronmx" style="display: flex; width: 100%; align-items: center; gap: 12px; background: transparent; border: none; padding: 12px 20px; font-size: 14px; color: var(--color-texto-secundario); cursor: pointer; transition: all 0.2s ease;">
+                    <iconify-icon icon="mdi:cloud-sync" class="icono-menu" style="color: #3a6ac9; font-size: 20px;"></iconify-icon>
+                    <span class="texto-menu">Sincronizar Astronmx</span>
+                </button>
             </nav>
 
             <div class="info-servidor">
@@ -96,6 +107,61 @@
             <!-- Contenedor dinámico de Vistas Modulares -->
             <div id="contenido-vista"></div>
         </main>
+    </div>
+
+    <!-- Modal Global: Rango de Fecha para Excel -->
+    <div id="modalRangoFechaExcel" class="modal-superpuesto" style="display: none;">
+        <div class="modal-contenido" style="width: 400px;">
+            <div class="modal-cabecera">
+                <h3>Exportar a Excel</h3>
+                <button type="button" id="btnCerrarModalExcel" class="btn-icono-top">
+                    <iconify-icon icon="mdi:close"></iconify-icon>
+                </button>
+            </div>
+            <div class="modal-cuerpo">
+                <form id="formRangoExcel">
+                    <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                        <div class="campo-formulario" style="flex: 1;">
+                            <label for="excelFechaInicio">Fecha Inicio:</label>
+                            <input type="date" id="excelFechaInicio" required class="filtro-select" style="width: 100%; height: 38px;">
+                        </div>
+                        <div class="campo-formulario" style="flex: 1;">
+                            <label for="excelFechaFin">Fecha Fin:</label>
+                            <input type="date" id="excelFechaFin" required class="filtro-select" style="width: 100%; height: 38px;">
+                        </div>
+                    </div>
+                    <div class="modal-acciones" style="display: flex; justify-content: flex-end; gap: 10px;">
+                        <button type="button" id="btnCancelarExcel" class="btn-filtrar" style="background-color: transparent; border: 1px solid var(--color-tarjeta-borde); color: var(--color-texto-secundario); height: 38px; padding: 0 20px;">Cancelar</button>
+                        <button type="submit" class="btn-filtrar" style="background-color: #2ebd75; border-color: #2ebd75; color: white; height: 38px; padding: 0 20px; font-weight: 600;">Generar Excel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Global: Sincronización con Astronmx -->
+    <div id="modalSincronizarAstronmx" class="modal-superpuesto" style="display: none;">
+        <div class="modal-contenido" style="width: 420px;">
+            <div class="modal-cabecera">
+                <h3>Sincronizar con Astronmx</h3>
+                <button type="button" id="btnCerrarModalSinc" class="btn-icono-top">
+                    <iconify-icon icon="mdi:close"></iconify-icon>
+                </button>
+            </div>
+            <div class="modal-cuerpo" style="padding-top: 15px;">
+                <p style="margin: 0 0 20px 0; font-size: 13.5px; color: var(--color-texto-secundario); line-height: 1.5;">
+                    ¿Desea enviar todos los registros de auditoría locales pendientes hacia el servidor central en la nube de Astronmx?
+                </p>
+                <div id="panelProgresoSinc" style="display: none; margin-bottom: 20px; text-align: center;">
+                    <iconify-icon icon="line-md:loading-twotone-loop" style="font-size: 32px; color: #3a6ac9; margin-bottom: 8px;"></iconify-icon>
+                    <p style="margin: 0; font-size: 13px; color: var(--color-texto);">Enviando registros en segundo plano...</p>
+                </div>
+                <div class="modal-acciones" style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" id="btnCancelarSinc" class="btn-filtrar" style="background-color: transparent; border: 1px solid var(--color-tarjeta-borde); color: var(--color-texto-secundario); height: 38px; padding: 0 20px;">Cancelar</button>
+                    <button type="button" id="btnConfirmarSinc" class="btn-filtrar" style="background-color: #3a6ac9; border-color: #3a6ac9; color: white; height: 38px; padding: 0 20px; font-weight: 600;">Sincronizar</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- JS de la App -->

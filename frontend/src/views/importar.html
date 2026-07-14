@@ -1,93 +1,150 @@
-<!-- Vista de Transferencia Masiva de Archivos PDF -->
+<!-- Vista de Transferencia Masiva de Archivos PDF (importar.html) -->
 <div id="vista-importar-wrapper">
     <div class="tabla-contenedor">
         <div class="tabla-cabecera" style="margin-bottom: 20px;">
             <div>
                 <h3>Transferir Archivos PDF al Servidor Central</h3>
                 <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--color-texto-secundario);">
-                    Escanea una carpeta local o de red, omite archivos ya registrados y copia masivamente los PDFs al servidor.
+                    Explora notarías locales, expande sus volúmenes para ver archivos en tiempo real y transfiérelos al servidor central.
                 </p>
             </div>
         </div>
 
-        <!-- Paso 1: Seleccionar Notaria Local -->
+        <!-- Explorador de Archivos en Árbol Interactivo -->
         <div class="tarjeta-panel" style="margin-bottom: 20px; padding: 22px; border-radius: 14px; border: 1px solid var(--color-tarjeta-borde);">
-            <h4 style="margin: 0 0 15px 0; font-size: 13px; color: var(--color-texto-secundario); text-transform: uppercase; letter-spacing: 0.8px;">
-                <iconify-icon icon="mdi:numeric-1-circle" style="font-size: 16px; margin-right: 5px; vertical-align: middle;"></iconify-icon>
-                Seleccionar Notaría en C:\\NOTARIAS
+            <h4 style="margin: 0 0 15px 0; font-size: 13px; color: var(--color-texto-secundario); text-transform: uppercase; letter-spacing: 0.8px; display: flex; align-items: center; gap: 6px;">
+                <iconify-icon icon="mdi:folder-network-outline" style="font-size: 18px;"></iconify-icon>
+                Explorador de Directorios Local (C:\\NOTARIAS)
             </h4>
-            <div style="display: flex; gap: 12px; align-items: center;">
-                <select id="cboNotariaImportar" class="filtro-select" style="flex: 1; height: 42px; padding: 0 14px; font-size: 14px;">
-                    <option value="">Cargando notarías...</option>
-                </select>
-                <button id="btnEscanearDirectorio" class="btn-filtrar"
-                    style="height: 42px; padding: 0 22px; background-color: #3a6ac9; border-color: #3a6ac9; color: white; font-weight: 600; white-space: nowrap;">
-                    <iconify-icon icon="mdi:folder-search-outline" style="vertical-align: middle; margin-right: 6px;"></iconify-icon>
-                    Escanear
-                </button>
+            
+            <!-- Estilos premium del Explorador en Árbol -->
+            <style>
+                .arbol-explorador-premium {
+                    max-height: 480px;
+                    overflow-y: auto;
+                    border: 1px solid var(--color-tarjeta-borde);
+                    border-radius: 10px;
+                    padding: 15px;
+                    background-color: var(--color-tarjeta-bg);
+                    font-family: var(--tipografia-cuerpo);
+                    font-size: 13.5px;
+                }
+                .nodo-notaria {
+                    margin-bottom: 8px;
+                }
+                .cabecera-notaria {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 6px 10px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    transition: background-color 0.2s;
+                }
+                .cabecera-notaria:hover {
+                    background-color: rgba(58, 106, 201, 0.06);
+                }
+                .lista-volumenes {
+                    margin-left: 28px;
+                    padding-left: 10px;
+                    border-left: 1px dashed var(--color-tarjeta-borde);
+                    display: none; /* Colapsado por defecto */
+                }
+                .nodo-volumen {
+                    margin: 4px 0;
+                }
+                .cabecera-volumen {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 5px 10px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    transition: background-color 0.2s;
+                }
+                .cabecera-volumen:hover {
+                    background-color: rgba(58, 106, 201, 0.06);
+                }
+                .lista-archivos-pdf {
+                    margin-left: 32px;
+                    padding-left: 10px;
+                    border-left: 1px dashed var(--color-tarjeta-borde);
+                    display: none; /* Colapsado por defecto */
+                }
+                .nodo-archivo-pdf {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 6px 12px;
+                    margin: 3px 0;
+                    border-radius: 6px;
+                    transition: background-color 0.2s;
+                }
+                /* Colores de estado visual en subnodos de archivos */
+                .nodo-archivo-pdf.no-registrado {
+                    background-color: rgba(234, 84, 85, 0.06);
+                    border: 1px solid rgba(234, 84, 85, 0.15);
+                }
+                .nodo-archivo-pdf.incompleto {
+                    background-color: rgba(245, 166, 35, 0.06);
+                    border: 1px solid rgba(245, 166, 35, 0.15);
+                }
+                .nodo-archivo-pdf.completo {
+                    background-color: rgba(46, 189, 117, 0.06);
+                    border: 1px solid rgba(46, 189, 117, 0.15);
+                }
+                .rotar-90 {
+                    transform: rotate(90deg);
+                }
+                .flecha-toggle {
+                    transition: transform 0.2s ease;
+                    cursor: pointer;
+                }
+            </style>
+
+            <!-- Contenedor del Explorador -->
+            <div id="exploradorDirectorios" class="arbol-explorador-premium" style="margin-bottom: 20px;">
+                <div style="text-align: center; color: var(--color-texto-secundario); padding: 40px;">
+                    <iconify-icon icon="line-md:loading-twotone-loop" style="font-size: 32px; color: #3a6ac9; margin-bottom: 8px;"></iconify-icon>
+                    <p style="margin: 0; font-size: 14px;">Escaneando estructura de notarías y subcarpetas...</p>
+                </div>
             </div>
-            <p id="lblEstadoEscaneo" style="margin: 10px 0 0 0; font-size: 12px; color: var(--color-texto-secundario);"></p>
-        </div>
 
-        <!-- Paso 2: Resultados del Escaneo y Transferencia -->
-        <div id="panelResultadosImportar" style="display: none;">
-            <div class="tarjeta-panel" style="padding: 22px; border-radius: 14px; border: 1px solid var(--color-tarjeta-borde); margin-bottom: 20px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 15px;">
-                    <h4 style="margin: 0; font-size: 13px; color: var(--color-texto-secundario); text-transform: uppercase; letter-spacing: 0.8px;">
-                        <iconify-icon icon="mdi:numeric-2-circle" style="font-size: 16px; margin-right: 5px; vertical-align: middle;"></iconify-icon>
-                        Resultados del Escaneo
-                    </h4>
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-                        <!-- Leyenda -->
-                        <span style="font-size: 11px; display: flex; align-items: center; gap: 5px;">
-                            <span style="display:inline-block; width:12px; height:12px; border-radius:3px; background: #E2EFDA;"></span>
-                            Nuevo
-                        </span>
-                        <span style="font-size: 11px; display: flex; align-items: center; gap: 5px;">
-                            <span style="display:inline-block; width:12px; height:12px; border-radius:3px; background: #F2F2F2; border: 1px solid #ccc;"></span>
-                            Ya registrado
-                        </span>
-                        <span style="font-size: 11px; display: flex; align-items: center; gap: 5px;">
-                            <span style="display:inline-block; width:12px; height:12px; border-radius:3px; background: #FFF2CC;"></span>
-                            Pesado (+500MB, copia directa)
-                        </span>
-                        <button id="btnTransferirTodo" class="btn-filtrar"
-                            style="height: 38px; padding: 0 18px; background-color: #2ebd75; border-color: #2ebd75; color: white; font-weight: 600;">
-                            <iconify-icon icon="mdi:cloud-upload-outline" style="vertical-align: middle; margin-right: 6px;"></iconify-icon>
-                            Transferir Todo
-                        </button>
-                    </div>
-                </div>
+            <!-- Leyenda de Estados Físicos de PDFs -->
+            <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px; padding: 12px; background: rgba(0,0,0,0.02); border-radius: 8px;">
+                <span style="font-size: 11px; display: flex; align-items: center; gap: 5px; font-weight: 500;">
+                    <span style="display:inline-block; width:10px; height:10px; border-radius:3px; background: rgba(46, 189, 117, 0.12); border: 1px solid rgba(46, 189, 117, 0.3);"></span>
+                    ✔ Registrado
+                </span>
+                <span style="font-size: 11px; display: flex; align-items: center; gap: 5px; font-weight: 500;">
+                    <span style="display:inline-block; width:10px; height:10px; border-radius:3px; background: rgba(245, 166, 35, 0.12); border: 1px solid rgba(245, 166, 35, 0.3);"></span>
+                    ⚠️ Incompleto (Requiere corrección de páginas)
+                </span>
+                <span style="font-size: 11px; display: flex; align-items: center; gap: 5px; font-weight: 500;">
+                    <span style="display:inline-block; width:10px; height:10px; border-radius:3px; background: rgba(234, 84, 85, 0.12); border: 1px solid rgba(234, 84, 85, 0.3);"></span>
+                    ❌ No registrado (Bloqueado)
+                </span>
+            </div>
 
-                <!-- Barra de Progreso Global -->
-                <div id="barraProgresoImportar" style="display: none; margin-bottom: 15px;">
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px;">
-                        <span id="lblProgresoTexto" style="color: var(--color-texto-secundario);">Importando...</span>
-                        <span id="lblPorcentaje" style="font-weight: 600; color: var(--color-texto);">0%</span>
-                    </div>
-                    <div style="height: 8px; background-color: var(--color-tarjeta-borde); border-radius: 99px; overflow: hidden;">
-                        <div id="barraProgreso" style="height: 100%; width: 0%; background: linear-gradient(90deg, #3a6ac9, #2ebd75); border-radius: 99px; transition: width 0.3s ease;"></div>
-                    </div>
+            <!-- Barra de Progreso de Transferencia Masiva -->
+            <div id="barraProgresoImportar" style="display: none; margin-bottom: 20px; padding: 15px; border: 1px solid var(--color-tarjeta-borde); border-radius: 10px; background-color: rgba(58, 106, 201, 0.02);">
+                <div style="display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 6px;">
+                    <span id="lblProgresoTexto" style="color: var(--color-texto-secundario); font-weight: 500;">Iniciando transferencia masiva...</span>
+                    <span id="lblPorcentaje" style="font-weight: 700; color: var(--color-texto);">0%</span>
                 </div>
+                <div style="height: 10px; background-color: var(--color-tarjeta-borde); border-radius: 99px; overflow: hidden;">
+                    <div id="barraProgreso" style="height: 100%; width: 0%; background: linear-gradient(90deg, #3a6ac9, #2ebd75); border-radius: 99px; transition: width 0.2s ease;"></div>
+                </div>
+            </div>
 
-                <div class="tabla-scroll" style="max-height: 450px; overflow-y: auto;">
-                    <table class="tabla-plana">
-                        <thead>
-                            <tr>
-                                <th style="width: 40px; text-align: center;">
-                                    <input type="checkbox" id="chkSeleccionarTodos" title="Seleccionar todos los nuevos" style="cursor: pointer;">
-                                </th>
-                                <th>Archivo</th>
-                                <th style="width: 180px;">Notaría</th>
-                                <th style="width: 140px;">Volumen / Lote</th>
-                                <th style="width: 100px; text-align: center;">Tamaño</th>
-                                <th style="width: 130px; text-align: center;">Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tablaImportarBody">
-                        </tbody>
-                    </table>
-                </div>
+            <!-- Acciones Finales -->
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div id="lblEstadoEscaneo" style="font-size: 12.5px; color: var(--color-texto-secundario); font-weight: 500;"></div>
+                <button id="btnTransferirTodo" class="btn-filtrar"
+                    style="height: 42px; padding: 0 25px; background-color: #2ebd75; border-color: #2ebd75; color: white; font-weight: 600; font-size: 13.5px; border-radius: 8px;">
+                    <iconify-icon icon="mdi:cloud-upload-outline" style="vertical-align: middle; margin-right: 6px; font-size: 18px;"></iconify-icon>
+                    Transferir Seleccionados
+                </button>
             </div>
         </div>
     </div>
