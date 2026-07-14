@@ -5,6 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "build": "electron-builder build --windows",
     "server": "node backend/server.js"
   },
   "keywords": [
@@ -25,6 +26,30 @@
     "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
-    "electron": "^43.1.0"
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.irec.servidornotarias",
+    "productName": "ServidorNotarias",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Servidor Notarías"
+    },
+    "files": [
+      "backend/**/*",
+      "frontend/**/*",
+      "main.js",
+      "package.json"
+    ]
   }
 }
