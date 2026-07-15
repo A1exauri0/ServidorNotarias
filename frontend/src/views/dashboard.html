@@ -27,19 +27,44 @@
         </div>
     </section>
 
-    <!-- Grid de Gráficas Verticales (Una arriba de la otra) -->
+
+    <!-- Grid de Gráficas Verticales -->
     <section class="seccion-graficas vertical">
+        <!-- 1. Productividad por Turno (Archivos PDFs) -->
         <div class="grafica-box">
-            <h3>Archivos PDFs Procesados por Notaría</h3>
-            <div class="canvas-container">
-                <canvas id="graficaBarrasPdfs"></canvas>
+            <h3>Productividad por Turno (Archivos PDFs)</h3>
+            <div class="canvas-container" style="height: 380px;">
+                <canvas id="graficaProductividadTurnoPdfs"></canvas>
             </div>
         </div>
 
+        <!-- 2. Productividad por Turno (Imágenes / Páginas) -->
         <div class="grafica-box" style="margin-top: 10px;">
-            <h3>Páginas / Imágenes Capturadas por Notaría</h3>
+            <h3>Productividad por Turno (Imágenes / Páginas)</h3>
             <div class="canvas-container" style="height: 380px;">
-                <canvas id="graficaBarrasPaginas"></canvas>
+                <canvas id="graficaProductividadTurno"></canvas>
+            </div>
+        </div>
+    <!-- Fila de Gráficas de Pastel (Total PDFs e Imágenes por Turno) -->
+    <section style="display: flex; gap: 15px; flex-wrap: wrap; width: 100%; margin-bottom: 15px;">
+        <div class="grafica-box" style="flex: 1; min-width: 290px;">
+            <h3>Total de PDFs por Turno</h3>
+            <div class="canvas-container" style="height: 300px; display: flex; justify-content: center; align-items: center;">
+                <canvas id="graficaPastelPdfsTurno"></canvas>
+            </div>
+        </div>
+        <div class="grafica-box" style="flex: 1; min-width: 290px;">
+            <h3>Total de Imágenes por Turno</h3>
+            <div class="canvas-container" style="height: 300px; display: flex; justify-content: center; align-items: center;">
+                <canvas id="graficaPastelImagenesTurno"></canvas>
+            </div>
+        </div>
+    </section>
+        <!-- 3. Archivos PDFs Procesados por Notaría (Abajo) -->
+        <div class="grafica-box" style="margin-top: 10px;">
+            <h3>Archivos PDFs Procesados por Notaría</h3>
+            <div class="canvas-container" style="height: 380px;">
+                <canvas id="graficaBarrasPdfs"></canvas>
             </div>
         </div>
     </section>

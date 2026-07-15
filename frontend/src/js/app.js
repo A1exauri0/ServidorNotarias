@@ -1,6 +1,9 @@
 // Variables globales para las gráficas de Chart.js
 let instanciaGraficaBarras = null;
 let instanciaGraficaPastel = null;
+let instanciaGraficaTurnosPdfs = null;
+let instanciaPastelPdfsTurno = null;
+let instanciaPastelImagenesTurno = null;
 
 // Almacén local de registros para filtrado dinámico
 let listaRegistrosLocal = [];
@@ -220,6 +223,25 @@ window.actualizarColoresGraficasPorTema = function (esClaro) {
     instanciaGraficaPastel.options.scales.y.grid.color = colorCuadricula;
     instanciaGraficaPastel.update();
   }
+
+  if (instanciaGraficaTurnosPdfs) {
+    instanciaGraficaTurnosPdfs.options.plugins.legend.labels.color = colorTexto;
+    instanciaGraficaTurnosPdfs.options.scales.x.ticks.color = colorTexto;
+    instanciaGraficaTurnosPdfs.options.scales.x.grid.color = colorCuadricula;
+    instanciaGraficaTurnosPdfs.options.scales.y.ticks.color = colorTexto;
+    instanciaGraficaTurnosPdfs.options.scales.y.grid.color = colorCuadricula;
+    instanciaGraficaTurnosPdfs.update();
+  }
+
+  if (instanciaPastelPdfsTurno) {
+    instanciaPastelPdfsTurno.options.plugins.legend.labels.color = colorTexto;
+    instanciaPastelPdfsTurno.update();
+  }
+
+  if (instanciaPastelImagenesTurno) {
+    instanciaPastelImagenesTurno.options.plugins.legend.labels.color = colorTexto;
+    instanciaPastelImagenesTurno.update();
+  }
 };
 
 // Establece las fechas del filtro (del 1 del mes actual al día de hoy)
@@ -316,8 +338,10 @@ function actualizarKpisYGraficas(datos) {
   if (elNot) elNot.innerText = listaNotarias.length.toString();
 
   // Renderizar Gráficas
+  renderizarPastelesPorTurno(datos.turnos || []);
+  renderizarGraficaTurnos(datos.turnos || []);
+  renderizarGraficaTurnosPdfs(datos.turnos || []);
   renderizarGraficaNotarias(notariasCombinadas, listaNotarias);
-  renderizarGraficaVolumenes(volumenesCombinados);
 }
 
 // Gráfica 1: PDFs e Imágenes agrupados por Notaría
@@ -387,28 +411,40 @@ function renderizarGraficaNotarias(datosCombinados, listaNotarias) {
   });
 }
 
-// Gráfica 2: PDFs e Imágenes agrupados por Volumen por Notaría
-function renderizarGraficaVolumenes(datosVolumenes) {
-  const canvas = document.getElementById("graficaBarrasPaginas");
+// Gráfica 2: Productividad (Páginas capturadas) por Turno en Gráfica de Puntos (Línea)
+function renderizarGraficaTurnos(datosTurnos) {
+  const canvas = document.getElementById("graficaProductividadTurno");
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
 
-  const listaVolumenes = Object.keys(datosVolumenes);
+  // 1. Obtener lista ordenada de fechas únicas
+  const fechasBase = [...new Set(datosTurnos.map((item) => item.fecha))].sort();
+  const fechasLabels = fechasBase.map((fecha) => {
+    try {
+      const partes = fecha.split("-");
+      return `${partes[2]}/${partes[1]}`; // Formato dd/mm
+    } catch (e) {
+      return fecha;
+    }
+  });
 
-  // Si hay demasiados volúmenes, tomamos los 15 con más PDFs para mantener la legibilidad
-  if (listaVolumenes.length > 15) {
-    listaVolumenes.sort(
-      (a, b) => datosVolumenes[b].pdfs - datosVolumenes[a].pdfs,
-    );
-    listaVolumenes.splice(15);
-  }
+  // 2. Agrupar datos por turno y fecha para fácil acceso
+  const mapaRendimiento = {};
+  datosTurnos.forEach((item) => {
+    const t = (item.turno || "Matutino").toLowerCase().trim();
+    if (!mapaRendimiento[t]) mapaRendimiento[t] = {};
+    mapaRendimiento[t][item.fecha] = parseInt(item.total_imagenes || 0, 10);
+  });
 
-  const datasetsPdfs = [];
-  const datasetsImagenes = [];
+  // 3. Crear datasets para cada turno
+  const datasetMatutino = [];
+  const datasetVespertino = [];
+  const datasetNocturno = [];
 
-  listaVolumenes.forEach((vol) => {
-    datasetsPdfs.push(datosVolumenes[vol].pdfs);
-    datasetsImagenes.push(datosVolumenes[vol].imagenes);
+  fechasBase.forEach((f) => {
+    datasetMatutino.push(mapaRendimiento["matutino"]?.[f] || 0);
+    datasetVespertino.push(mapaRendimiento["vespertino"]?.[f] || 0);
+    datasetNocturno.push(mapaRendimiento["nocturno"]?.[f] || 0);
   });
 
   if (instanciaGraficaPastel) {
@@ -420,25 +456,45 @@ function renderizarGraficaVolumenes(datosVolumenes) {
   const colorCuadricula = esClaro ? "#d2dbe8" : "#24242b";
 
   instanciaGraficaPastel = new Chart(ctx, {
-    type: "bar",
+    type: "line",
     data: {
-      labels: listaVolumenes,
+      labels: fechasLabels,
       datasets: [
         {
-          label: "PDFs por Volumen",
-          data: datasetsPdfs,
-          backgroundColor: "rgba(235, 85, 132, 0.85)", // Rosa
-          borderColor: "#eb5584",
-          borderWidth: 1,
-          borderRadius: 4,
+          label: "Turno Matutino",
+          data: datasetMatutino,
+          borderColor: "#f5a623", // Ámbar
+          backgroundColor: "rgba(245, 166, 35, 0.15)",
+          borderWidth: 2,
+          pointRadius: 6,
+          pointHoverRadius: 8,
+          pointBackgroundColor: "#f5a623",
+          fill: false,
+          tension: 0.1,
         },
         {
-          label: "Páginas por Volumen",
-          data: datasetsImagenes,
-          backgroundColor: "rgba(139, 92, 246, 0.85)", // Morado
-          borderColor: "#8b5cf6",
-          borderWidth: 1,
-          borderRadius: 4,
+          label: "Turno Vespertino",
+          data: datasetVespertino,
+          borderColor: "#2ebd75", // Verde
+          backgroundColor: "rgba(46, 189, 117, 0.15)",
+          borderWidth: 2,
+          pointRadius: 6,
+          pointHoverRadius: 8,
+          pointBackgroundColor: "#2ebd75",
+          fill: false,
+          tension: 0.1,
+        },
+        {
+          label: "Turno Nocturno",
+          data: datasetNocturno,
+          borderColor: "#3a6ac9", // Azul
+          backgroundColor: "rgba(58, 106, 201, 0.15)",
+          borderWidth: 2,
+          pointRadius: 6,
+          pointHoverRadius: 8,
+          pointBackgroundColor: "#3a6ac9",
+          fill: false,
+          tension: 0.1,
         },
       ],
     },
@@ -447,22 +503,18 @@ function renderizarGraficaVolumenes(datosVolumenes) {
       maintainAspectRatio: false,
       plugins: {
         legend: {
-          labels: { color: colorTexto, font: { family: "Outfit" } },
+          labels: { color: colorTexto, font: { family: "Outfit", size: 12 } },
         },
       },
       scales: {
         x: {
-          ticks: {
-            color: colorTexto,
-            font: { family: "Inter", size: 10 },
-            maxRotation: 45,
-            minRotation: 45,
-          },
+          ticks: { color: colorTexto, font: { family: "Inter" } },
           grid: { color: colorCuadricula },
         },
         y: {
           ticks: { color: colorTexto, font: { family: "Inter" } },
           grid: { color: colorCuadricula },
+          beginAtZero: true,
         },
       },
     },
@@ -753,4 +805,200 @@ function exportarRegistrosExcel() {
       }
     });
   }
+}
+
+// Gráfica 3: PDFs procesados por Turno en Gráfica de Puntos (Línea)
+function renderizarGraficaTurnosPdfs(datosTurnos) {
+  const canvas = document.getElementById("graficaProductividadTurnoPdfs");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+
+  // 1. Obtener lista ordenada de fechas únicas
+  const fechasBase = [...new Set(datosTurnos.map((item) => item.fecha))].sort();
+  const fechasLabels = fechasBase.map((fecha) => {
+    try {
+      const partes = fecha.split("-");
+      return `${partes[2]}/${partes[1]}`; // Formato dd/mm
+    } catch (e) {
+      return fecha;
+    }
+  });
+
+  // 2. Agrupar datos por turno y fecha para fácil acceso
+  const mapaRendimiento = {};
+  datosTurnos.forEach((item) => {
+    const t = (item.turno || "Matutino").toLowerCase().trim();
+    if (!mapaRendimiento[t]) mapaRendimiento[t] = {};
+    mapaRendimiento[t][item.fecha] = parseInt(item.total_pdfs || 0, 10);
+  });
+
+  // 3. Crear datasets para cada turno
+  const datasetMatutino = [];
+  const datasetVespertino = [];
+  const datasetNocturno = [];
+
+  fechasBase.forEach((f) => {
+    datasetMatutino.push(mapaRendimiento["matutino"]?.[f] || 0);
+    datasetVespertino.push(mapaRendimiento["vespertino"]?.[f] || 0);
+    datasetNocturno.push(mapaRendimiento["nocturno"]?.[f] || 0);
+  });
+
+  if (instanciaGraficaTurnosPdfs) {
+    instanciaGraficaTurnosPdfs.destroy();
+  }
+
+  const esClaro = document.body.classList.contains("tema-claro");
+  const colorTexto = esClaro ? "#17233d" : "#8d8d99";
+  const colorCuadricula = esClaro ? "#d2dbe8" : "#24242b";
+
+  instanciaGraficaTurnosPdfs = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: fechasLabels,
+      datasets: [
+        {
+          label: "Turno Matutino (PDFs)",
+          data: datasetMatutino,
+          borderColor: "#f5a623", // Ámbar
+          backgroundColor: "rgba(245, 166, 35, 0.15)",
+          borderWidth: 2,
+          pointRadius: 6,
+          pointHoverRadius: 8,
+          pointBackgroundColor: "#f5a623",
+          fill: false,
+          tension: 0.1,
+        },
+        {
+          label: "Turno Vespertino (PDFs)",
+          data: datasetVespertino,
+          borderColor: "#2ebd75", // Verde
+          backgroundColor: "rgba(46, 189, 117, 0.15)",
+          borderWidth: 2,
+          pointRadius: 6,
+          pointHoverRadius: 8,
+          pointBackgroundColor: "#2ebd75",
+          fill: false,
+          tension: 0.1,
+        },
+        {
+          label: "Turno Nocturno (PDFs)",
+          data: datasetNocturno,
+          borderColor: "#3a6ac9", // Azul
+          backgroundColor: "rgba(58, 106, 201, 0.15)",
+          borderWidth: 2,
+          pointRadius: 6,
+          pointHoverRadius: 8,
+          pointBackgroundColor: "#3a6ac9",
+          fill: false,
+          tension: 0.1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          labels: { color: colorTexto, font: { family: "Outfit", size: 12 } },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: colorTexto, font: { family: "Inter" } },
+          grid: { color: colorCuadricula },
+        },
+        y: {
+          ticks: { color: colorTexto, font: { family: "Inter" } },
+          grid: { color: colorCuadricula },
+          beginAtZero: true,
+        },
+      },
+    },
+  });
+}
+
+// Gráficas de Pastel: Totales consolidados de PDFs e Imágenes por Turno
+function renderizarPastelesPorTurno(datosTurnos) {
+  const canvasPdfs = document.getElementById("graficaPastelPdfsTurno");
+  const canvasImg = document.getElementById("graficaPastelImagenesTurno");
+  if (!canvasPdfs || !canvasImg) return;
+
+  const ctxPdfs = canvasPdfs.getContext("2d");
+  const ctxImg = canvasImg.getContext("2d");
+
+  // 1. Acumular totales por turno
+  let totalPdfsMatutino = 0;
+  let totalPdfsVespertino = 0;
+  let totalPdfsNocturno = 0;
+
+  let totalImgMatutino = 0;
+  let totalImgVespertino = 0;
+  let totalImgNocturno = 0;
+
+  datosTurnos.forEach((item) => {
+    const t = (item.turno || "Matutino").toLowerCase().trim();
+    const pdfs = parseInt(item.total_pdfs || 0, 10);
+    const img = parseInt(item.total_imagenes || 0, 10);
+
+    if (t === "matutino") {
+      totalPdfsMatutino += pdfs;
+      totalImgMatutino += img;
+    } else if (t === "vespertino") {
+      totalPdfsVespertino += pdfs;
+      totalImgVespertino += img;
+    } else if (t === "nocturno") {
+      totalPdfsNocturno += pdfs;
+      totalImgNocturno += img;
+    }
+  });
+
+  if (instanciaPastelPdfsTurno) {
+    instanciaPastelPdfsTurno.destroy();
+  }
+  if (instanciaPastelImagenesTurno) {
+    instanciaPastelImagenesTurno.destroy();
+  }
+
+  const esClaro = document.body.classList.contains("tema-claro");
+  const colorTexto = esClaro ? "#17233d" : "#8d8d99";
+
+  const dataPdfs = [totalPdfsMatutino, totalPdfsVespertino, totalPdfsNocturno];
+  const dataImg = [totalImgMatutino, totalImgVespertino, totalImgNocturno];
+  const labels = ["Matutino", "Vespertino", "Nocturno"];
+  const colores = ["#f5a623", "#2ebd75", "#3a6ac9"];
+
+  // Configuración base común para las gráficas de pastel
+  const getConfigPastel = (ctx, titulo, datasetData) => {
+    return new Chart(ctx, {
+      type: "doughnut", // Doughnut se ve más moderno y premium que Pie simple
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            data: datasetData,
+            backgroundColor: colores,
+            borderWidth: 2,
+            borderColor: esClaro ? "#ffffff" : "#17171e",
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "right",
+            labels: {
+              color: colorTexto,
+              font: { family: "Outfit", size: 12 },
+              padding: 15,
+            },
+          },
+        },
+      },
+    });
+  };
+
+  instanciaPastelPdfsTurno = getConfigPastel(ctxPdfs, "PDFs por Turno", dataPdfs);
+  instanciaPastelImagenesTurno = getConfigPastel(ctxImg, "Imágenes por Turno", dataImg);
 }

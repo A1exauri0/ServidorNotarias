@@ -10,6 +10,44 @@ const { exec } = require("child_process");
 
 let dbPool = null;
 
+// Helper para calcular la fecha fiscal de jornada y el turno en base a los horarios y fines de semana
+function resolverFechaYTurnoDeJornada(fechaHoraStr) {
+  const fecha = new Date(fechaHoraStr);
+  const hora = fecha.getHours();
+  
+  let turno = "Matutino";
+  let fechaJornada = new Date(fecha);
+  
+  // Horarios de turnos:
+  // matutino: de 6 am a 2 pm (6:00 a 13:59)
+  // vespertino: de 2 pm a 10 pm (14:00 a 21:59)
+  // nocturno: de 10 pm a 6 am (22:00 a 05:59 del dia siguiente)
+  if (hora >= 6 && hora < 14) {
+    turno = "Matutino";
+  } else if (hora >= 14 && hora < 22) {
+    turno = "Vespertino";
+  } else {
+    turno = "Nocturno";
+    // Si la hora es de 00:00 a 05:59 AM, pertenece a la jornada del dia anterior
+    if (hora < 6) {
+      fechaJornada.setDate(fechaJornada.getDate() - 1);
+    }
+  }
+  
+  // Fines de semana: si la jornada cae en Sabado (6) o Domingo (0), se acumulan al dia Viernes anterior
+  const diaSemana = fechaJornada.getDay();
+  if (diaSemana === 6) {
+    fechaJornada.setDate(fechaJornada.getDate() - 1);
+  } else if (diaSemana === 0) {
+    fechaJornada.setDate(fechaJornada.getDate() - 2);
+  }
+  
+  const y = fechaJornada.getFullYear();
+  const m = String(fechaJornada.getMonth() + 1).padStart(2, '0');
+  const d = String(fechaJornada.getDate()).padStart(2, '0');
+  return { fechaStr: `${y}-${m}-${d}`, turno };
+}
+
 // Inicializa el pool de base de datos desde server.js
 function inicializarPool(pool) {
   dbPool = pool;
@@ -20,87 +58,132 @@ async function obtenerProductividadGeneral(req, res) {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
     if (!fecha_inicio || !fecha_fin) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          mensaje:
-            "Debe especificar fecha_inicio y fecha_fin (formato yyyy-mm-dd).",
-        });
+      return res.status(400).json({
+        ok: false,
+        mensaje: "Debe especificar fecha_inicio y fecha_fin (formato yyyy-mm-dd).",
+      });
     }
 
-    const [productividadData] = await dbPool.query(
+    // Consultamos los registros brutos en el rango de fechas
+    const [registros] = await dbPool.query(
       `
-            SELECT 
-                DATE(fecha_hora) as fecha,
-                COALESCE(notaria, 'General') as notaria,
-                COALESCE(volumen, 'Sin volumen') as volumen,
-                COUNT(*) as total_pdfs,
-                SUM(paginas) as total_imagenes
+            SELECT fecha_hora, notaria, volumen, paginas, turno
             FROM \`auditoria\`
             WHERE DATE(fecha_hora) BETWEEN ? AND ?
-            GROUP BY DATE(fecha_hora), notaria, volumen
-            ORDER BY fecha ASC, total_pdfs DESC
         `,
       [fecha_inicio, fecha_fin],
     );
 
+    const agrupadoNotarias = {};
+    const agrupadoTurnos = {};
+
+    registros.forEach((r) => {
+      const { fechaStr, turno } = resolverFechaYTurnoDeJornada(r.fecha_hora);
+      const notaria = r.notaria || "General";
+      const volumen = r.volumen || "Sin volumen";
+      const paginas = parseInt(r.paginas || 0, 10);
+
+      // 1. Agrupación por Notaria y Volumen (para la gráfica de barras)
+      const claveNotaria = `${fechaStr}_${notaria.toUpperCase()}_${volumen.toUpperCase()}`;
+      if (!agrupadoNotarias[claveNotaria]) {
+        agrupadoNotarias[claveNotaria] = {
+          fecha: fechaStr,
+          notaria: notaria,
+          volumen: volumen,
+          total_pdfs: 0,
+          total_imagenes: 0
+        };
+      }
+      agrupadoNotarias[claveNotaria].total_pdfs += 1;
+      agrupadoNotarias[claveNotaria].total_imagenes += paginas;
+
+      // 2. Agrupación por Fecha y Turno (para las gráficas de puntos)
+      const claveTurno = `${fechaStr}_${turno}`;
+      if (!agrupadoTurnos[claveTurno]) {
+        agrupadoTurnos[claveTurno] = {
+          fecha: fechaStr,
+          turno: turno,
+          total_pdfs: 0,
+          total_imagenes: 0
+        };
+      }
+      agrupadoTurnos[claveTurno].total_pdfs += 1;
+      agrupadoTurnos[claveTurno].total_imagenes += paginas;
+    });
+
+    const notarias = Object.values(agrupadoNotarias).sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const turnos = Object.values(agrupadoTurnos).sort((a, b) => a.fecha.localeCompare(b.fecha));
+
     res.json({
       ok: true,
-      notarias: productividadData,
+      notarias,
+      turnos,
       digitalizacion: [], // Compatibilidad
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        ok: false,
-        mensaje: "Error al consultar estadísticas: " + error.message,
-      });
+    res.status(500).json({
+      ok: false,
+      mensaje: "Error al consultar estadísticas: " + error.message,
+    });
   }
 }
 
-// Obtiene la productividad diaria agrupada por capturista y fecha para la nueva vista estilo Excel
+// Obtiene la productividad diaria agrupada por capturista y fecha para la vista estilo Excel
 async function obtenerProductividadDiaria(req, res) {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
     if (!fecha_inicio || !fecha_fin) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          mensaje:
-            "Debe especificar fecha_inicio y fecha_fin (formato yyyy-mm-dd).",
-        });
+      return res.status(400).json({
+        ok: false,
+        mensaje: "Debe especificar fecha_inicio y fecha_fin (formato yyyy-mm-dd).",
+      });
     }
 
-    const [productividadDiaria] = await dbPool.query(
+    const [registros] = await dbPool.query(
       `
-            SELECT 
-                DATE_FORMAT(fecha_hora, '%Y-%m-%d') as fecha,
-                COALESCE(usuario, 'Desconocido') as usuario,
-                COALESCE(turno, 'Matutino') as turno,
-                COUNT(*) as total_pdfs,
-                SUM(paginas) as total_paginas
+            SELECT fecha_hora, usuario, paginas
             FROM \`auditoria\`
             WHERE DATE(fecha_hora) BETWEEN ? AND ?
-            GROUP BY fecha, usuario, turno
-            ORDER BY fecha DESC, usuario ASC, turno ASC
         `,
       [fecha_inicio, fecha_fin],
     );
 
+    const agrupadoDiario = {};
+
+    registros.forEach((r) => {
+      const { fechaStr, turno } = resolverFechaYTurnoDeJornada(r.fecha_hora);
+      const usuario = r.usuario || "Desconocido";
+      const paginas = parseInt(r.paginas || 0, 10);
+
+      const clave = `${fechaStr}_${usuario.toUpperCase()}_${turno}`;
+      if (!agrupadoDiario[clave]) {
+        agrupadoDiario[clave] = {
+          fecha: fechaStr,
+          usuario: usuario,
+          turno: turno,
+          total_pdfs: 0,
+          total_paginas: 0
+        };
+      }
+      agrupadoDiario[clave].total_pdfs += 1;
+      agrupadoDiario[clave].total_paginas += paginas;
+    });
+
+    const productividad = Object.values(agrupadoDiario).sort((a, b) => {
+      if (a.fecha !== b.fecha) return b.fecha.localeCompare(a.fecha); // Más reciente primero
+      if (a.usuario !== b.usuario) return a.usuario.localeCompare(b.usuario);
+      return a.turno.localeCompare(b.turno);
+    });
+
     res.json({
       ok: true,
-      productividad: productividadDiaria,
+      productividad,
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        ok: false,
-        mensaje: "Error al consultar productividad diaria: " + error.message,
-      });
+    res.status(500).json({
+      ok: false,
+      mensaje: "Error al consultar productividad diaria: " + error.message,
+    });
   }
 }
 
@@ -109,13 +192,11 @@ async function exportarExcelAuditoria(req, res) {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
     if (!fecha_inicio || !fecha_fin) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          mensaje:
-            "Debe especificar fecha_inicio y fecha_fin (formato yyyy-mm-dd).",
-        });
+      return res.status(400).json({
+        ok: false,
+        mensaje:
+          "Debe especificar fecha_inicio y fecha_fin (formato yyyy-mm-dd).",
+      });
     }
 
     // Consultar todos los registros en el rango de fechas
@@ -129,30 +210,23 @@ async function exportarExcelAuditoria(req, res) {
     );
 
     if (registros.length === 0) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          mensaje: "No hay datos para exportar en este rango.",
-        });
+      return res.status(400).json({
+        ok: false,
+        mensaje: "No hay datos para exportar en este rango.",
+      });
     }
 
-    // 1. Agrupar por Fecha (formato YYYY-MM-DD)
+    // 1. Agrupar por Fecha usando la lógica fiscal de turnos y fines de semana
     const registrosPorFecha = {};
     registros.forEach((reg) => {
-      let fecha = "General";
-      try {
-        const dateVal = new Date(reg.fecha_hora);
-        const anio = dateVal.getFullYear();
-        const mes = String(dateVal.getMonth() + 1).padStart(2, "0");
-        const dia = String(dateVal.getDate()).padStart(2, "0");
-        fecha = `${anio}-${mes}-${dia}`;
-      } catch (e) {}
+      const { fechaStr, turno } = resolverFechaYTurnoDeJornada(reg.fecha_hora);
+      reg.fecha_calculada = fechaStr;
+      reg.turno_calculado = turno;
 
-      if (!registrosPorFecha[fecha]) {
-        registrosPorFecha[fecha] = [];
+      if (!registrosPorFecha[fechaStr]) {
+        registrosPorFecha[fechaStr] = [];
       }
-      registrosPorFecha[fecha].push(reg);
+      registrosPorFecha[fechaStr].push(reg);
     });
 
     // 2. Deduplicar registros por archivo original por cada fecha (Lógica idéntica a la app C#)
@@ -206,14 +280,7 @@ async function exportarExcelAuditoria(req, res) {
     // 3. Agrupar por Fecha -> PC -> IP -> Usuario -> Turno
     const registrosAgrupados = {};
     registrosDeduplicados.forEach((reg) => {
-      let fecha = "General";
-      try {
-        const dateVal = new Date(reg.fecha_hora);
-        const anio = dateVal.getFullYear();
-        const mes = String(dateVal.getMonth() + 1).padStart(2, "0");
-        const dia = String(dateVal.getDate()).padStart(2, "0");
-        fecha = `${anio}-${mes}-${dia}`;
-      } catch (e) {}
+      const fecha = reg.fecha_calculada;
 
       if (!registrosAgrupados[fecha]) {
         registrosAgrupados[fecha] = {};
@@ -234,7 +301,7 @@ async function exportarExcelAuditoria(req, res) {
         registrosAgrupados[fecha][pc][ip][usuario] = {};
       }
 
-      const turno = reg.turno || "Matutino";
+      const turno = reg.turno_calculado;
       if (!registrosAgrupados[fecha][pc][ip][usuario][turno]) {
         registrosAgrupados[fecha][pc][ip][usuario][turno] = [];
       }
