@@ -796,6 +796,100 @@ async function sincronizarAstronmxSilencioso() {
   }
 }
 
+// Obtiene el listado de PCs que han registrado auditorías en el sistema
+async function obtenerPcsUnicas(req, res) {
+  try {
+    const [rows] = await dbPool.query(
+      "SELECT DISTINCT pc FROM `auditoria` WHERE pc IS NOT NULL AND pc <> '' ORDER BY pc ASC"
+    );
+    const pcs = rows.map((r) => r.pc);
+    res.json({ ok: true, pcs });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      mensaje: "Error al consultar PCs únicas: " + error.message,
+    });
+  }
+}
+
+// Escanea C:\NOTARIAS para reparar en lote los registros con páginas incompletas (0 o 1)
+async function repararPaginasIncompletas(req, res) {
+  try {
+    const { pc } = req.body;
+
+    let sqlSelect = "SELECT id, notaria, volumen, archivo, pc FROM `auditoria` WHERE paginas <= 1";
+    const sqlParams = [];
+
+    if (pc && pc !== "TODAS") {
+      sqlSelect += " AND pc = ?";
+      sqlParams.push(pc);
+    }
+
+    const [rows] = await dbPool.query(sqlSelect, sqlParams);
+
+    if (rows.length === 0) {
+      return res.json({
+        ok: true,
+        omitido: true,
+        totalIncompletos: 0,
+        totalReparados: 0,
+        totalNoEncontrados: 0,
+      });
+    }
+
+    let totalIncompletos = rows.length;
+    let totalReparados = 0;
+    let totalNoEncontrados = 0;
+
+    const rutaBase = "C:\\NOTARIAS";
+
+    for (const reg of rows) {
+      const notaria = reg.notaria || "General";
+      const volumen = reg.volumen;
+      const archivo = reg.archivo;
+
+      if (!archivo) {
+        totalNoEncontrados++;
+        continue;
+      }
+
+      // Reconstruir la ruta local
+      let rutaFisica = "";
+      if (volumen && volumen !== "SIN VOLUMEN") {
+        rutaFisica = path.join(rutaBase, notaria, volumen, archivo);
+      } else {
+        rutaFisica = path.join(rutaBase, notaria, archivo);
+      }
+
+      if (fs.existsSync(rutaFisica)) {
+        // Calcular páginas reales optimizado
+        const paginas = await contarPaginasPdf(rutaFisica);
+
+        // Actualizar en MySQL
+        await dbPool.query(
+          "UPDATE `auditoria` SET paginas = ?, updated_at = NOW() WHERE id = ?",
+          [paginas, reg.id]
+        );
+        totalReparados++;
+      } else {
+        totalNoEncontrados++;
+      }
+    }
+
+    res.json({
+      ok: true,
+      totalIncompletos,
+      totalReparados,
+      totalNoEncontrados,
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      mensaje: "Error al reparar páginas incompletas: " + error.message,
+    });
+  }
+}
+
 module.exports = {
   inicializarPool,
   registrarAuditoria,
@@ -806,4 +900,6 @@ module.exports = {
   obtenerNotariasLocales,
   sincronizarAstronmx,
   sincronizarAstronmxSilencioso,
+  obtenerPcsUnicas,
+  repararPaginasIncompletas,
 };

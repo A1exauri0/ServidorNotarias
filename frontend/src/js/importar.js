@@ -245,8 +245,8 @@ async function cargarArchivosDeVolumen(
         } else if (requiereCorreccion) {
           claseEstado = "incompleto";
           textoEstado = `⚠️ Incompleto (${item.paginasRegistradas} pág.)`;
-          chkHabilitado = true;
-          chkChecked = true;
+          chkHabilitado = false;
+          chkChecked = false;
         }
 
         if (esPesado) {

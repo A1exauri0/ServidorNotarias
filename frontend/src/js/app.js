@@ -133,6 +133,191 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnExportarExcel) {
     btnExportarExcel.addEventListener("click", exportarRegistrosExcel);
   }
+
+  // Vincular evento de Reparar Páginas (Global)
+  const btnReparar = document.getElementById("btnMenuRepararPaginas");
+  const modalReparar = document.getElementById("modalRepararPaginas");
+  const btnRepararPc = document.getElementById("btnRepararPc");
+  const wrapperRepararPc = document.getElementById("wrapperRepararPc");
+  const optionsRepararPc = document.getElementById("optionsRepararPc");
+  const formReparar = document.getElementById("formRepararPaginas");
+
+  console.log("[DEBUG] Inicializando btnReparar:", btnReparar, "modalReparar:", modalReparar);
+
+  // Configura y pobla de manera interactiva el selector de PC del modal de reparación
+  function configurarRepararPcDropdown(pcs, cargando = false) {
+    if (!wrapperRepararPc || !btnRepararPc || !optionsRepararPc) return;
+
+    const valorActual = btnRepararPc.getAttribute("data-valor") || "TODAS";
+
+    if (cargando) {
+      optionsRepararPc.innerHTML = `<div class="custom-select-option seleccionado" data-valor="TODAS">Cargando PCs...</div>`;
+      btnRepararPc.setAttribute("data-valor", "TODAS");
+      btnRepararPc.innerText = "Cargando PCs...";
+      return;
+    }
+
+    // Renderizar opciones
+    optionsRepararPc.innerHTML = `<div class="custom-select-option ${valorActual === "TODAS" ? "seleccionado" : ""}" data-valor="TODAS">Todas las PCs</div>`;
+    pcs.forEach((pc) => {
+      optionsRepararPc.innerHTML += `<div class="custom-select-option ${valorActual === pc ? "seleccionado" : ""}" data-valor="${pc}">${pc}</div>`;
+    });
+
+    // Asegurar que el texto del botón coincida con el valor seleccionado
+    const seleccionadaOpt = optionsRepararPc.querySelector(`.custom-select-option[data-valor="${valorActual}"]`);
+    if (seleccionadaOpt) {
+      btnRepararPc.innerText = seleccionadaOpt.innerText;
+    } else {
+      btnRepararPc.setAttribute("data-valor", "TODAS");
+      btnRepararPc.innerText = "Todas las PCs";
+    }
+
+    // Manejar el clic en el botón para abrir/cerrar
+    if (!btnRepararPc.dataset.listener) {
+      btnRepararPc.dataset.listener = "true";
+      btnRepararPc.addEventListener("click", (e) => {
+        e.stopPropagation();
+        document.querySelectorAll(".custom-select-wrapper").forEach((w) => {
+          if (w !== wrapperRepararPc) w.classList.remove("activo");
+        });
+        wrapperRepararPc.classList.toggle("activo");
+      });
+    }
+
+    // Registrar listener de clic en las opciones
+    optionsRepararPc.onclick = (e) => {
+      const opt = e.target.closest(".custom-select-option");
+      if (!opt) return;
+
+      const nuevoValor = opt.getAttribute("data-valor");
+      btnRepararPc.setAttribute("data-valor", nuevoValor);
+      btnRepararPc.innerText = opt.innerText;
+
+      optionsRepararPc
+        .querySelectorAll(".custom-select-option")
+        .forEach((o) => o.classList.remove("seleccionado"));
+      opt.classList.add("seleccionado");
+      wrapperRepararPc.classList.remove("activo");
+    };
+  }
+
+  const cerrarModalReparar = () => {
+    console.log("[DEBUG] Cerrando modal Reparar");
+    if (modalReparar) modalReparar.style.display = "none";
+  };
+
+  const btnCerrarReparar = document.getElementById("btnCerrarModalReparar");
+  if (btnCerrarReparar) {
+    btnCerrarReparar.addEventListener("click", cerrarModalReparar);
+  }
+
+  if (btnReparar && modalReparar) {
+    btnReparar.addEventListener("click", async () => {
+      console.log("[DEBUG-VER-3] Click detectado en btnReparar. Forzando display flex...");
+      
+      // 1. Mostrar el modal inmediatamente de forma limpia y rapida
+      modalReparar.style.display = "flex";
+      modalReparar.classList.remove("minimizado");
+      
+      // Forzar reflow en el motor de renderizado de Chromium (Electron) para evitar el lag de GPU
+      modalReparar.offsetHeight;
+
+      // 2. Resetear interfaz
+      document.getElementById("panelProgresoReparar").style.display = "none";
+      document.getElementById("panelResultadosReparar").style.display = "none";
+      formReparar.style.display = "block";
+      document.getElementById("btnIniciarReparacion").disabled = false;
+      
+      // 3. Colocar estado de carga temporal en el select
+      configurarRepararPcDropdown([], true);
+
+      // 4. Cargar PCs únicas dinámicamente en segundo plano de forma no bloqueante
+      try {
+        const res = await fetch("http://localhost:3000/api/pcs-unicas");
+        const datos = await res.json();
+        if (datos.ok && datos.pcs) {
+          configurarRepararPcDropdown(datos.pcs);
+        } else {
+          configurarRepararPcDropdown([]);
+        }
+      } catch (err) {
+        console.error("Error al cargar PCs únicas:", err);
+        configurarRepararPcDropdown([]);
+      }
+    });
+  }
+
+  if (formReparar) {
+    formReparar.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const btnIniciar = document.getElementById("btnIniciarReparacion");
+      btnIniciar.disabled = true;
+      formReparar.style.display = "none";
+      document.getElementById("panelProgresoReparar").style.display = "block";
+      document.getElementById("panelResultadosReparar").style.display = "none";
+
+      const pcSeleccionada = btnRepararPc ? (btnRepararPc.getAttribute("data-valor") || "TODAS") : "TODAS";
+
+      try {
+        const respuesta = await fetch("http://localhost:3000/api/reparar-paginas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pc: pcSeleccionada })
+        });
+        const datos = await respuesta.json();
+
+        document.getElementById("panelProgresoReparar").style.display = "none";
+        
+        if (datos.ok) {
+          if (datos.omitido) {
+            alert("Sin registros pendientes.");
+            formReparar.style.display = "block";
+          } else {
+            document.getElementById("lblRepararIncompletos").textContent = datos.totalIncompletos;
+            document.getElementById("lblRepararExitosos").textContent = datos.totalReparados;
+            document.getElementById("lblRepararFallidos").textContent = datos.totalNoEncontrados;
+            document.getElementById("panelResultadosReparar").style.display = "block";
+            
+            if (vistaActual === "registros") {
+              cargarTablaRegistros(); // Recargar registros si el usuario está en esta pantalla
+            }
+          }
+        } else {
+          alert("⚠️ " + datos.mensaje);
+          formReparar.style.display = "block";
+        }
+      } catch (error) {
+        console.error("Error al reparar páginas:", error);
+        alert("❌ Error al comunicarse con el servidor local para realizar la reparación.");
+        document.getElementById("panelProgresoReparar").style.display = "none";
+        formReparar.style.display = "block";
+      } finally {
+        btnIniciar.disabled = false;
+      }
+    });
+  }
+
+  // Soporte global de Minimizar/Maximizar Modales
+  document.querySelectorAll(".btn-minimizar-modal").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const overlay = btn.closest(".modal-superpuesto");
+      if (!overlay) return;
+
+      overlay.classList.toggle("minimizado");
+      
+      // Forzar reflow tras alternar clase de minimizado
+      overlay.offsetHeight;
+
+      const esMinimizado = overlay.classList.contains("minimizado");
+
+      // Actualizar icono según el estado de minimizado
+      const icono = btn.querySelector("iconify-icon");
+      if (icono) {
+        icono.setAttribute("icon", esMinimizado ? "mdi:window-maximize" : "mdi:window-minimize");
+      }
+    });
+  });
 });
 
 // Carga dinámica de sub-vistas HTML

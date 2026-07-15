@@ -61,6 +61,10 @@
                     <iconify-icon icon="mdi:cloud-sync" class="icono-menu" style="color: #3a6ac9; font-size: 20px;"></iconify-icon>
                     <span class="texto-menu">Sincronizar Astronmx</span>
                 </button>
+                <button class="nav-item-accion" id="btnMenuRepararPaginas" style="display: flex; width: 100%; align-items: center; gap: 12px; background: transparent; border: none; padding: 12px 20px; font-size: 14px; color: var(--color-texto-secundario); cursor: pointer; transition: all 0.2s ease;">
+                    <iconify-icon icon="mdi:wrench" class="icono-menu" style="color: #eb5584; font-size: 20px;"></iconify-icon>
+                    <span class="texto-menu">Reparar Páginas</span>
+                </button>
             </nav>
 
             <div class="info-servidor">
@@ -122,9 +126,14 @@
         <div class="modal-contenido" style="width: 400px;">
             <div class="modal-cabecera">
                 <h3>Exportar a Excel</h3>
-                <button type="button" id="btnCerrarModalExcel" class="btn-icono-top">
-                    <iconify-icon icon="mdi:close"></iconify-icon>
-                </button>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button type="button" class="btn-minimizar-modal" title="Minimizar">
+                        <iconify-icon icon="mdi:window-minimize"></iconify-icon>
+                    </button>
+                    <button type="button" id="btnCerrarModalExcel" class="btn-icono-top">
+                        <iconify-icon icon="mdi:close"></iconify-icon>
+                    </button>
+                </div>
             </div>
             <div class="modal-cuerpo">
                 <form id="formRangoExcel">
@@ -156,9 +165,14 @@
         <div class="modal-contenido" style="width: 420px;">
             <div class="modal-cabecera">
                 <h3>Sincronizar con Astronmx</h3>
-                <button type="button" id="btnCerrarModalSinc" class="btn-icono-top">
-                    <iconify-icon icon="mdi:close"></iconify-icon>
-                </button>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button type="button" class="btn-minimizar-modal" title="Minimizar">
+                        <iconify-icon icon="mdi:window-minimize"></iconify-icon>
+                    </button>
+                    <button type="button" id="btnCerrarModalSinc" class="btn-icono-top">
+                        <iconify-icon icon="mdi:close"></iconify-icon>
+                    </button>
+                </div>
             </div>
             <div class="modal-cuerpo" style="padding-top: 15px;">
                 <p style="margin: 0 0 20px 0; font-size: 13.5px; color: var(--color-texto-secundario); line-height: 1.5;">
@@ -181,9 +195,14 @@
         <div class="modal-contenido" style="width: 400px;">
             <div class="modal-cabecera">
                 <h3>Consultar Productividad</h3>
-                <button type="button" id="btnCerrarModalConsulta" class="btn-icono-top">
-                    <iconify-icon icon="mdi:close"></iconify-icon>
-                </button>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button type="button" class="btn-minimizar-modal" title="Minimizar">
+                        <iconify-icon icon="mdi:window-minimize"></iconify-icon>
+                    </button>
+                    <button type="button" id="btnCerrarModalConsulta" class="btn-icono-top">
+                        <iconify-icon icon="mdi:close"></iconify-icon>
+                    </button>
+                </div>
             </div>
             <div class="modal-cuerpo" style="padding-top: 15px;">
                 <form id="formConsultaUsuario">
@@ -219,6 +238,74 @@
                             <iconify-icon icon="mdi:image-outline" style="font-size: 18px; color: #2ebd75;"></iconify-icon> Total de Imágenes:
                         </span>
                         <span id="lblResultadoImagenes" style="font-size: 16px; font-weight: bold; color: var(--color-texto);">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+     <!-- Modal Reparar Páginas (Incompletos 0 o 1 páginas) -->
+    <div id="modalRepararPaginas" class="modal-superpuesto" style="display: none; z-index: 10000;">
+        <div class="modal-contenido" style="width: 420px;">
+            <div class="modal-cabecera">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <iconify-icon icon="mdi:wrench" style="color: #eb5584; font-size: 22px;"></iconify-icon>
+                    <h3>Reparar Páginas</h3>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button type="button" class="btn-minimizar-modal" title="Minimizar">
+                        <iconify-icon icon="mdi:window-minimize"></iconify-icon>
+                    </button>
+                    <button type="button" id="btnCerrarModalReparar" class="btn-icono-top">
+                        <iconify-icon icon="mdi:close"></iconify-icon>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-cuerpo" style="padding-top: 15px;">
+                <form id="formRepararPaginas">
+                    <div class="campo-formulario" style="margin-bottom: 20px;">
+                        <label>Seleccionar PC a Reparar:</label>
+                        <div class="custom-select-wrapper" id="wrapperRepararPc" style="width: 100%;">
+                            <button type="button" class="custom-select-btn" id="btnRepararPc" data-valor="TODAS" style="width: 100%; text-align: left; height: 38px;">Todas las PCs</button>
+                            <div class="custom-select-options" id="optionsRepararPc" style="width: 100%;">
+                                <div class="custom-select-option seleccionado" data-valor="TODAS">Todas las PCs</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" id="btnIniciarReparacion" class="btn-filtrar" style="width: 100%; background-color: #eb5584; border-color: #eb5584; color: white; height: 40px; font-weight: 600; font-size: 14px; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                        <iconify-icon icon="mdi:play" style="font-size: 18px;"></iconify-icon>Iniciar Reparación
+                    </button>
+                </form>
+
+                <!-- Panel de Progreso/Carga -->
+                <div id="panelProgresoReparar" style="text-align: center; padding: 15px 0; display: none;">
+                    <iconify-icon icon="line-md:loading-twotone-loop" style="color: #eb5584; font-size: 32px; margin-bottom: 10px;"></iconify-icon>
+                    <p style="margin: 0; font-size: 13.5px; color: var(--color-texto-secundario);">Escaneando C:\NOTARIAS y recalculando páginas...</p>
+                </div>
+
+                <!-- Panel de Resultados de Reparación -->
+                <div id="panelResultadosReparar" style="border: 1px solid var(--color-tarjeta-borde); border-radius: 12px; padding: 15px; background-color: rgba(10, 10, 12, 0.2); display: none;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 13px; color: var(--color-texto-secundario); text-transform: uppercase; letter-spacing: 0.5px;">Resumen del Escaneo</h4>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 13px; color: var(--color-texto-secundario); display: flex; align-items: center; gap: 6px;">
+                            <iconify-icon icon="mdi:alert-circle-outline" style="font-size: 18px; color: #f5a623;"></iconify-icon> Registros Incompletos:
+                        </span>
+                        <span id="lblRepararIncompletos" style="font-size: 15px; font-weight: bold; color: var(--color-texto);">0</span>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 13px; color: var(--color-texto-secundario); display: flex; align-items: center; gap: 6px;">
+                            <iconify-icon icon="mdi:check-circle-outline" style="font-size: 18px; color: #2ebd75;"></iconify-icon> Reparados Exitosamente:
+                        </span>
+                        <span id="lblRepararExitosos" style="font-size: 15px; font-weight: bold; color: var(--color-texto);">0</span>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 13px; color: var(--color-texto-secundario); display: flex; align-items: center; gap: 6px;">
+                            <iconify-icon icon="mdi:close-circle-outline" style="font-size: 18px; color: #eb5584;"></iconify-icon> No encontrados físicamente:
+                        </span>
+                        <span id="lblRepararFallidos" style="font-size: 15px; font-weight: bold; color: var(--color-texto);">0</span>
                     </div>
                 </div>
             </div>
