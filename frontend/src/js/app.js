@@ -10,6 +10,29 @@ let listaRegistrosLocal = [];
 
 let vistaActual = "dashboard";
 
+// Actualiza de forma dinámica el icono de estado de carga/éxito en la cabecera de los modales (útil al minimizarlos)
+function actualizarEstadoCabecera(idModal, estado) {
+  const modal = document.getElementById(idModal);
+  if (!modal) return;
+
+  const indicador = modal.querySelector(".status-icono-cabecera");
+  if (!indicador) return;
+
+  if (estado === "cargando") {
+    indicador.style.display = "inline-flex";
+    indicador.innerHTML = `<iconify-icon icon="line-md:loading-twotone-loop" style="color: #f5a623;"></iconify-icon>`;
+  } else if (estado === "listo") {
+    indicador.style.display = "inline-flex";
+    indicador.innerHTML = `<iconify-icon icon="mdi:check-circle" style="color: #2ebd75;"></iconify-icon>`;
+  } else if (estado === "error") {
+    indicador.style.display = "inline-flex";
+    indicador.innerHTML = `<iconify-icon icon="mdi:close-circle" style="color: #eb5584;"></iconify-icon>`;
+  } else {
+    indicador.style.display = "none";
+    indicador.innerHTML = "";
+  }
+}
+
 // Ejecutar cuando se cargue el DOM de la aplicación
 document.addEventListener("DOMContentLoaded", () => {
   establecerFechasPorDefecto();
@@ -99,6 +122,7 @@ document.addEventListener("DOMContentLoaded", () => {
       btnConfirmarSinc.disabled = true;
       document.getElementById("btnCancelarSinc").disabled = true;
       document.getElementById("panelProgresoSinc").style.display = "block";
+      actualizarEstadoCabecera("modalSincronizarAstronmx", "cargando");
 
       try {
         const respuesta = await fetch(
@@ -110,20 +134,26 @@ document.addEventListener("DOMContentLoaded", () => {
         const datos = await respuesta.json();
 
         if (datos.ok) {
+          actualizarEstadoCabecera("modalSincronizarAstronmx", "listo");
           alert(datos.mensaje);
           if (vistaActual === "registros") {
             cargarTablaRegistros(); // Refrescar si estamos viendo la tabla
           }
         } else {
+          actualizarEstadoCabecera("modalSincronizarAstronmx", "error");
           alert("⚠️ " + datos.mensaje);
         }
       } catch (error) {
+        actualizarEstadoCabecera("modalSincronizarAstronmx", "error");
         console.error("Error al sincronizar con Astronmx:", error);
         alert(
           "❌ No se pudo conectar con el servidor local para la sincronización.",
         );
       } finally {
-        cerrarModalSinc();
+        setTimeout(() => {
+          cerrarModalSinc();
+          actualizarEstadoCabecera("modalSincronizarAstronmx", "normal");
+        }, 3000);
       }
     });
   }
@@ -256,6 +286,7 @@ document.addEventListener("DOMContentLoaded", () => {
       formReparar.style.display = "none";
       document.getElementById("panelProgresoReparar").style.display = "block";
       document.getElementById("panelResultadosReparar").style.display = "none";
+      actualizarEstadoCabecera("modalRepararPaginas", "cargando");
 
       const pcSeleccionada = btnRepararPc ? (btnRepararPc.getAttribute("data-valor") || "TODAS") : "TODAS";
 
@@ -270,6 +301,7 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("panelProgresoReparar").style.display = "none";
         
         if (datos.ok) {
+          actualizarEstadoCabecera("modalRepararPaginas", "listo");
           if (datos.omitido) {
             alert("Sin registros pendientes.");
             formReparar.style.display = "block";
@@ -284,16 +316,93 @@ document.addEventListener("DOMContentLoaded", () => {
             }
           }
         } else {
+          actualizarEstadoCabecera("modalRepararPaginas", "error");
           alert("⚠️ " + datos.mensaje);
           formReparar.style.display = "block";
         }
       } catch (error) {
+        actualizarEstadoCabecera("modalRepararPaginas", "error");
         console.error("Error al reparar páginas:", error);
         alert("❌ Error al comunicarse con el servidor local para realizar la reparación.");
         document.getElementById("panelProgresoReparar").style.display = "none";
         formReparar.style.display = "block";
       } finally {
         btnIniciar.disabled = false;
+        setTimeout(() => {
+          actualizarEstadoCabecera("modalRepararPaginas", "normal");
+        }, 4000);
+      }
+    });
+  }
+
+  // Vincular evento de Migración Histórica (Global)
+  const btnMenuMigrar = document.getElementById("btnMenuMigrarHistorico");
+  const modalMigrar = document.getElementById("modalMigrarHistorico");
+  const btnIniciarMigrar = document.getElementById("btnIniciarMigracion");
+
+  const cerrarModalMigrar = () => {
+    if (modalMigrar) modalMigrar.style.display = "none";
+  };
+
+  const btnCerrarMigrar = document.getElementById("btnCerrarModalMigrar");
+  if (btnCerrarMigrar) {
+    btnCerrarMigrar.addEventListener("click", cerrarModalMigrar);
+  }
+
+  if (btnMenuMigrar && modalMigrar) {
+    btnMenuMigrar.addEventListener("click", () => {
+      modalMigrar.style.display = "flex";
+      modalMigrar.classList.remove("minimizado");
+      
+      // Resetear interfaz
+      document.getElementById("panelConfirmarMigrar").style.display = "block";
+      document.getElementById("panelProgresoMigrar").style.display = "none";
+      document.getElementById("panelResultadosMigrar").style.display = "none";
+      if (btnIniciarMigrar) btnIniciarMigrar.disabled = false;
+    });
+  }
+
+  if (btnIniciarMigrar) {
+    btnIniciarMigrar.addEventListener("click", async () => {
+      btnIniciarMigrar.disabled = true;
+      document.getElementById("panelConfirmarMigrar").style.display = "none";
+      document.getElementById("panelProgresoMigrar").style.display = "block";
+      actualizarEstadoCabecera("modalMigrarHistorico", "cargando");
+
+      try {
+        const respuesta = await fetch("http://localhost:3000/api/migrar-historico", {
+          method: "POST"
+        });
+        const datos = await respuesta.json();
+
+        document.getElementById("panelProgresoMigrar").style.display = "none";
+
+        if (datos.ok) {
+          actualizarEstadoCabecera("modalMigrarHistorico", "listo");
+          document.getElementById("lblMigrarUsuarios").textContent = datos.usuariosMigrados;
+          document.getElementById("lblMigrarRegistros").textContent = datos.registrosMigrados;
+          document.getElementById("lblMigrarDuplicados").textContent = datos.duplicadosOmitidos;
+          document.getElementById("panelResultadosMigrar").style.display = "block";
+
+          if (vistaActual === "registros") {
+            cargarTablaRegistros();
+          }
+        } else {
+          actualizarEstadoCabecera("modalMigrarHistorico", "error");
+          alert("⚠️ " + datos.mensaje);
+          document.getElementById("panelConfirmarMigrar").style.display = "block";
+        }
+      } catch (error) {
+        actualizarEstadoCabecera("modalMigrarHistorico", "error");
+        console.error("Error al migrar histórico:", error);
+        alert("❌ Error al comunicarse con el servidor local para realizar la migración.");
+        document.getElementById("panelProgresoMigrar").style.display = "none";
+        document.getElementById("panelConfirmarMigrar").style.display = "block";
+      } finally {
+        btnIniciarMigrar.disabled = false;
+        setTimeout(() => {
+          actualizarEstadoCabecera("modalMigrarHistorico", "normal");
+        }, 4000);
       }
     });
   }

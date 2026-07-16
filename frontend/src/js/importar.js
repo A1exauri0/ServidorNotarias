@@ -35,6 +35,13 @@ async function cargarArbolDirectorios() {
     explorador.innerHTML = "";
 
     if (datos.ok && datos.notarias && datos.notarias.length > 0) {
+      // Identificar bases de datos locales únicas encontradas físicamente
+      const basesUnicas = [...new Set(datos.notarias.map(n => n.rutaBase))];
+      const lblTitulo = document.getElementById("lblTituloExplorador");
+      if (lblTitulo && basesUnicas.length > 0) {
+        lblTitulo.textContent = `Explorador de Directorios Local (${basesUnicas.join(", ")})`;
+      }
+
       datos.notarias.forEach((notaria) => {
         const notariaIdSeguro = notaria.nombre.replace(/[^a-zA-Z0-9]/g, "_");
         const tieneVolumenes =
@@ -92,6 +99,9 @@ async function cargarArbolDirectorios() {
             listaArchivos.id = `lista_archivos_${volumenIdSeguro}`;
             listaArchivos.dataset.cargado = "false";
             listaArchivos.dataset.rutaEscaneo = `${notaria.nombre}\\${vol}`;
+            listaArchivos.dataset.rutaBase = notaria.rutaBase || "C:\\NOTARIAS";
+            listaArchivos.dataset.alias = notaria.alias || "";
+            listaArchivos.dataset.usaSubcarpeta = notaria.usaSubcarpeta ? "true" : "false";
 
             nodoVolumen.appendChild(listaArchivos);
 
@@ -123,7 +133,7 @@ async function cargarArbolDirectorios() {
 
             cabeceraVol.addEventListener("click", expandirVolumen);
 
-            // Evento checkbox de volumen (seleccionar/deseleccionar sus archivos hijos)
+            // Evento checkbox de volumen (seleccionar todos sus archivos)
             const chkVol = cabeceraVol.querySelector(".chk-volumen");
             chkVol.addEventListener("change", (e) => {
               const checked = e.target.checked;
@@ -135,17 +145,20 @@ async function cargarArbolDirectorios() {
               });
             });
 
+            nodoVolumen.appendChild(listaArchivos);
             listaVolumenes.appendChild(nodoVolumen);
           });
 
           nodoNotaria.appendChild(listaVolumenes);
 
-          // Evento para expandir/colapsar notaría
+          // Evento para expandir/colapsar la notaría
           const chevronNotaria = cabecera.querySelector(
             `.flecha-notaria-${notariaIdSeguro}`,
           );
           const expandirNotaria = (e) => {
+            // Evitar disparar si se hace clic en el checkbox
             if (e.target.type === "checkbox") return;
+
             const visible = listaVolumenes.style.display === "block";
             listaVolumenes.style.display = visible ? "none" : "block";
             if (chevronNotaria) {
@@ -177,7 +190,7 @@ async function cargarArbolDirectorios() {
         explorador.appendChild(nodoNotaria);
       });
     } else {
-      explorador.innerHTML = `<div style="text-align: center; color: var(--color-texto-secundario); padding: 20px;">No se encontraron directorios en C:\\NOTARIAS.</div>`;
+      explorador.innerHTML = `<div style="text-align: center; color: var(--color-texto-secundario); padding: 20px;">No se encontraron directorios locales de Notarías, Nóminas o Libros.</div>`;
     }
   } catch (error) {
     console.error("Error al construir árbol:", error);
@@ -198,13 +211,22 @@ async function cargarArchivosDeVolumen(
     </div>
   `;
 
+  const rBase = contenedorDOM.dataset.rutaBase;
+  const alias = contenedorDOM.dataset.alias;
+  const usaSub = contenedorDOM.dataset.usaSubcarpeta === "true";
+
   try {
     const respuesta = await fetch(
       "http://localhost:3000/api/escanear-directorio",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notariaSeleccionada: rutaRelativa }),
+        body: JSON.stringify({ 
+          notariaSeleccionada: rutaRelativa,
+          rutaBase: rBase,
+          alias: alias,
+          usaSubcarpeta: usaSub
+        }),
       },
     );
 

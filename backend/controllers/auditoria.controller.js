@@ -331,70 +331,116 @@ async function obtenerRegistros(req, res) {
   }
 }
 
-// Obtiene el listado de carpetas que representan notarias en C:\NOTARIAS
+// Obtiene el listado de carpetas que representan notarias en C:\NOTARIAS, C:\NOMINAS y C:\LIBROS
 async function obtenerNotariasLocales(req, res) {
   try {
-    const rutaBase = "C:\\NOTARIAS";
-    if (!fs.existsSync(rutaBase)) {
-      return res.json({ ok: true, notarias: [] });
-    }
+    const bases = [
+      { path: "C:\\NOTARIAS", alias: "NOTARIAS" },
+      { path: "C:\\NOMINAS", alias: "NOMINAS" },
+      { path: "C:\\LIBROS", alias: "LIBROS" }
+    ];
 
-    const items = fs.readdirSync(rutaBase);
     const arbolNotarias = [];
 
-    items.forEach((item) => {
-      const rutaNotaria = path.join(rutaBase, item);
-      try {
-        const stat = fs.statSync(rutaNotaria);
-        if (stat.isDirectory() && item.toUpperCase().startsWith("NOTARIA")) {
-          // Leer las subcarpetas (volúmenes o lotes) de esta notaría
-          const subItems = fs.readdirSync(rutaNotaria);
-          const volumenes = subItems.filter((subItem) => {
-            const rutaVol = path.join(rutaNotaria, subItem);
-            try {
-              const subStat = fs.statSync(rutaVol);
-              return subStat.isDirectory();
-            } catch (e) {
-              return false;
-            }
-          });
+    for (const baseObj of bases) {
+      const rutaBase = baseObj.path;
+      if (!fs.existsSync(rutaBase)) continue;
 
-          arbolNotarias.push({
-            nombre: item,
-            volumenes: volumenes,
-          });
-        }
-      } catch (e) {
-        // Ignorar carpetas individuales con problemas de lectura
+      let items = fs.readdirSync(rutaBase);
+
+      // Comprobar también si dentro hay una subcarpeta intermedia con el mismo nombre (ej: C:\NOTARIAS\NOTARIAS)
+      const subcarpetaDuplicada = path.join(rutaBase, baseObj.alias);
+      let rutaLectura = rutaBase;
+      let usaSubcarpeta = false;
+
+      if (fs.existsSync(subcarpetaDuplicada)) {
+        try {
+          const statSub = fs.statSync(subcarpetaDuplicada);
+          if (statSub.isDirectory()) {
+            rutaLectura = subcarpetaDuplicada;
+            items = fs.readdirSync(subcarpetaDuplicada);
+            usaSubcarpeta = true;
+          }
+        } catch (errSub) {}
       }
-    });
+
+      items.forEach((item) => {
+        const rutaNotaria = path.join(rutaLectura, item);
+        try {
+          const stat = fs.statSync(rutaNotaria);
+          // Permitir cualquier directorio que no sea la carpeta duplicada en sí
+          if (stat.isDirectory() && item !== baseObj.alias) {
+            // Leer las subcarpetas (volúmenes o lotes)
+            const subItems = fs.readdirSync(rutaNotaria);
+            const volumenes = subItems.filter((subItem) => {
+              const rutaVol = path.join(rutaNotaria, subItem);
+              try {
+                const subStat = fs.statSync(rutaVol);
+                return subStat.isDirectory();
+              } catch (e) {
+                return false;
+              }
+            });
+
+            arbolNotarias.push({
+              nombre: item,
+              volumenes: volumenes,
+              rutaBase: rutaBase,
+              alias: baseObj.alias,
+              usaSubcarpeta: usaSubcarpeta
+            });
+          }
+        } catch (e) {
+          // Ignorar carpetas individuales con problemas de lectura
+        }
+      });
+    }
 
     res.json({ ok: true, notarias: arbolNotarias });
   } catch (error) {
     res.status(500).json({
       ok: false,
-      mensaje: "Error al listar notarias: " + error.message,
+      mensaje: "Error al listar directorios locales: " + error.message,
     });
   }
 }
 
-// Escanea recursivamente los PDFs de una notaria seleccionada en C:\NOTARIAS\<notaria>
+// Escanea recursivamente los PDFs de una notaria/nomina/libro seleccionada
 async function escanearDirectorio(req, res) {
   try {
-    const { notariaSeleccionada } = req.body;
+    const { notariaSeleccionada, rutaBase, alias, usaSubcarpeta } = req.body;
     if (!notariaSeleccionada) {
       return res.status(400).json({
         ok: false,
-        mensaje: "Debe especificar la notaría a escanear.",
+        mensaje: "Debe especificar el directorio a escanear.",
       });
     }
 
-    const rutaDirectorio = path.join("C:\\NOTARIAS", notariaSeleccionada);
+    // Resolver la ruta física del directorio
+    let rutaDirectorio = "";
+    const baseFinal = rutaBase || "C:\\NOTARIAS";
+
+    if (usaSubcarpeta && alias) {
+      rutaDirectorio = path.join(baseFinal, alias, notariaSeleccionada);
+    } else {
+      rutaDirectorio = path.join(baseFinal, notariaSeleccionada);
+    }
+
+    // Fallback de ruta por si no existe
+    if (!fs.existsSync(rutaDirectorio)) {
+      if (alias) {
+        if (usaSubcarpeta) {
+          rutaDirectorio = path.join(baseFinal, notariaSeleccionada);
+        } else {
+          rutaDirectorio = path.join(baseFinal, alias, notariaSeleccionada);
+        }
+      }
+    }
 
     if (!fs.existsSync(rutaDirectorio)) {
       return res.status(400).json({
         ok: false,
-        mensaje: `La ruta de la notaría no existe en el disco local: ${rutaDirectorio}`,
+        mensaje: `La ruta del directorio no existe en el disco local: ${rutaDirectorio}`,
       });
     }
 
@@ -800,7 +846,7 @@ async function sincronizarAstronmxSilencioso() {
 async function obtenerPcsUnicas(req, res) {
   try {
     const [rows] = await dbPool.query(
-      "SELECT DISTINCT pc FROM `auditoria` WHERE pc IS NOT NULL AND pc <> '' ORDER BY pc ASC"
+      "SELECT DISTINCT pc FROM `auditoria` WHERE pc IS NOT NULL AND pc <> '' ORDER BY pc ASC",
     );
     const pcs = rows.map((r) => r.pc);
     res.json({ ok: true, pcs });
@@ -817,7 +863,8 @@ async function repararPaginasIncompletas(req, res) {
   try {
     const { pc } = req.body;
 
-    let sqlSelect = "SELECT id, notaria, volumen, archivo, pc FROM `auditoria` WHERE paginas <= 1";
+    let sqlSelect =
+      "SELECT id, notaria, volumen, archivo, pc FROM `auditoria` WHERE paginas <= 1";
     const sqlParams = [];
 
     if (pc && pc !== "TODAS") {
@@ -841,7 +888,12 @@ async function repararPaginasIncompletas(req, res) {
     let totalReparados = 0;
     let totalNoEncontrados = 0;
 
-    const rutaBase = "C:\\NOTARIAS";
+    // Listado de directorios base de almacenamiento local y sus respectivas subcarpetas duplicadas
+    const basesPosibles = [
+      { base: "C:\\NOTARIAS", sub: "NOTARIAS" },
+      { base: "C:\\NOMINAS", sub: "NOMINAS" },
+      { base: "C:\\LIBROS", sub: "LIBROS" }
+    ];
 
     for (const reg of rows) {
       const notaria = reg.notaria || "General";
@@ -853,22 +905,44 @@ async function repararPaginasIncompletas(req, res) {
         continue;
       }
 
-      // Reconstruir la ruta local
       let rutaFisica = "";
-      if (volumen && volumen !== "SIN VOLUMEN") {
-        rutaFisica = path.join(rutaBase, notaria, volumen, archivo);
-      } else {
-        rutaFisica = path.join(rutaBase, notaria, archivo);
+      let encontrado = false;
+
+      // Buscar secuencialmente en los directorios de Notarías, Nóminas y Libros
+      for (const itemBase of basesPosibles) {
+        // 1. Probar ruta física directa
+        if (volumen && volumen !== "SIN VOLUMEN") {
+          rutaFisica = path.join(itemBase.base, notaria, volumen, archivo);
+        } else {
+          rutaFisica = path.join(itemBase.base, notaria, archivo);
+        }
+
+        if (fs.existsSync(rutaFisica)) {
+          encontrado = true;
+          break;
+        }
+
+        // 2. Probar ruta física con subcarpeta intermedia duplicada
+        if (volumen && volumen !== "SIN VOLUMEN") {
+          rutaFisica = path.join(itemBase.base, itemBase.sub, notaria, volumen, archivo);
+        } else {
+          rutaFisica = path.join(itemBase.base, itemBase.sub, notaria, archivo);
+        }
+
+        if (fs.existsSync(rutaFisica)) {
+          encontrado = true;
+          break;
+        }
       }
 
-      if (fs.existsSync(rutaFisica)) {
+      if (encontrado) {
         // Calcular páginas reales optimizado
         const paginas = await contarPaginasPdf(rutaFisica);
 
         // Actualizar en MySQL
         await dbPool.query(
           "UPDATE `auditoria` SET paginas = ?, updated_at = NOW() WHERE id = ?",
-          [paginas, reg.id]
+          [paginas, reg.id],
         );
         totalReparados++;
       } else {
@@ -890,6 +964,218 @@ async function repararPaginasIncompletas(req, res) {
   }
 }
 
+// Realiza la migración nativa de usuarios e históricos JSON de auditoría desde C:\NOTARIAS
+async function migrarHistorico(req, res) {
+  try {
+    let usuariosMigrados = 0;
+    let registrosMigrados = 0;
+    let duplicadosOmitidos = 0;
+
+    // 1. MIGRACIÓN DE USUARIOS (Notarías, Nóminas y Libros)
+    const rutasUsuariosJsonPosibles = [
+      "C:\\NOTARIAS\\usuarios.json",
+      "C:\\NOMINAS\\usuarios.json",
+      "C:\\LIBROS\\usuarios.json"
+    ];
+
+    // Asegurar estructura de tablas una sola vez
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS \`usuarios\` (
+        \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+        \`nombre_completo\` VARCHAR(255) NOT NULL,
+        \`nombre_usuario\` VARCHAR(255) UNIQUE NOT NULL,
+        \`pin\` VARCHAR(4) NOT NULL,
+        \`turno\` VARCHAR(50) DEFAULT 'Matutino',
+        \`created_at\` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        \`updated_at\` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS \`configuracion\` (
+        \`clave\` VARCHAR(100) PRIMARY KEY,
+        \`valor\` TEXT
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    for (const rutaUsuariosJson of rutasUsuariosJsonPosibles) {
+      if (fs.existsSync(rutaUsuariosJson)) {
+        try {
+          const jsonContenido = fs.readFileSync(rutaUsuariosJson, "utf8");
+          const datosUsuarios = JSON.parse(jsonContenido);
+
+          if (
+            datosUsuarios &&
+            datosUsuarios.Usuarios &&
+            Array.isArray(datosUsuarios.Usuarios)
+          ) {
+            for (const u of datosUsuarios.Usuarios) {
+              const nombreCompleto = (u.NombreCompleto || "").trim();
+              const nombreUsuario = (u.NombreUsuario || "").toLowerCase().trim();
+              const pin = (u.Pin || "").trim();
+              const turno = (u.Turno || "Matutino").trim();
+
+              if (!nombreUsuario || !pin) continue;
+
+              await dbPool.query(
+                `INSERT INTO usuarios (nombre_completo, nombre_usuario, pin, turno) 
+                 VALUES (?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE nombre_completo = ?, pin = ?, turno = ?`,
+                [
+                  nombreCompleto,
+                  nombreUsuario,
+                  pin,
+                  turno,
+                  nombreCompleto,
+                  pin,
+                  turno,
+                ],
+              );
+              usuariosMigrados++;
+            }
+          }
+        } catch (errUsr) {
+          console.error(`Error al migrar usuarios JSON desde ${rutaUsuariosJson}:`, errUsr);
+        }
+      }
+    }
+
+    // 2. MIGRACIÓN DE HISTÓRICOS JSON DE AUDITORÍA (Notarías, Nóminas y Libros)
+    const directoriosMonitoreoPosibles = [
+      "C:\\NOTARIAS\\MonitoreoCaptura",
+      "C:\\NOMINAS\\MonitoreoCaptura",
+      "C:\\LIBROS\\MonitoreoCaptura"
+    ];
+
+    for (const directorioMonitoreo of directoriosMonitoreoPosibles) {
+      if (fs.existsSync(directorioMonitoreo)) {
+        try {
+          const elementos = fs.readdirSync(directorioMonitoreo);
+
+          for (const elem of elementos) {
+            const rutaCarpetaPc = path.join(directorioMonitoreo, elem);
+            const stat = fs.statSync(rutaCarpetaPc);
+
+            if (stat.isDirectory()) {
+              const rutaJson = path.join(rutaCarpetaPc, "auditoria.json");
+              if (fs.existsSync(rutaJson)) {
+                const nombrePc = elem;
+                const jsonContenido = fs.readFileSync(rutaJson, "utf8");
+                const datosJson = JSON.parse(jsonContenido);
+
+                let registrosJson = [];
+                if (
+                  datosJson &&
+                  datosJson.Registros &&
+                  Array.isArray(datosJson.Registros)
+                ) {
+                  registrosJson = datosJson.Registros;
+                } else if (Array.isArray(datosJson)) {
+                  registrosJson = datosJson;
+                }
+
+                for (const reg of registrosJson) {
+                  const fechaHora = reg.FechaHora || reg.fecha_hora || null;
+                  const archivo =
+                    reg.ArchivoOriginal ||
+                    reg.archivo_original ||
+                    reg.archivo ||
+                    null;
+
+                  if (!fechaHora || !archivo) continue;
+
+                  // Verificar duplicado en la base de datos
+                  const [rows] = await dbPool.query(
+                    "SELECT id FROM `auditoria` WHERE fecha_hora = ? AND pc = ? AND archivo = ? LIMIT 1",
+                    [fechaHora, nombrePc, archivo],
+                  );
+
+                  if (rows.length > 0) {
+                    duplicadosOmitidos++;
+                    continue;
+                  }
+
+                  // Insertar registro en lote con separación de Notaría y Volumen, y captura de IP correcta
+                  const turno = reg.Turno || reg.turno || "Matutino";
+                  const usuario = reg.Usuario || reg.usuario || null;
+                  const ip = reg.IP || reg.Ip || reg.ip || null;
+                  const detalles = reg.Detalles || reg.detalles || null;
+                  const paginas = parseInt(reg.Paginas || reg.paginas || 0, 10);
+                  const lugarTrabajo =
+                    reg.LugarTrabajo || reg.lugar_trabajo || null;
+                  const exportadoEn =
+                    reg.ExportadoEn || reg.exportado_en || reg.fecha_hora || null;
+                  const createdAt =
+                    reg.CreatedAt ||
+                    reg.created_at ||
+                    reg.fecha_hora ||
+                    new Date();
+                  const updatedAt =
+                    reg.UpdatedAt ||
+                    reg.updated_at ||
+                    reg.fecha_hora ||
+                    new Date();
+
+                  let notaria =
+                    reg.Notaria || reg.notaria || reg.directorio || "General";
+                  let volumen =
+                    reg.Volumen || reg.volumen || reg.Lote || reg.lote || null;
+
+                  if (typeof notaria === "string" && notaria.includes("\\")) {
+                    const partes = notaria.split("\\");
+                    notaria = partes[0].trim();
+                    if (!volumen) {
+                      volumen = partes[1].trim();
+                    }
+                  }
+
+                  await dbPool.query(
+                    `INSERT INTO \`auditoria\` 
+                     (fecha_hora, turno, usuario, pc, ip, notaria, volumen, archivo, detalles, paginas, exportado, exportado_en, lugar_trabajo, created_at, updated_at) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+                    [
+                      fechaHora,
+                      turno,
+                      usuario,
+                      nombrePc,
+                      ip,
+                      notaria,
+                      volumen,
+                      archivo,
+                      detalles,
+                      paginas,
+                      exportadoEn,
+                      lugarTrabajo,
+                      createdAt,
+                      updatedAt,
+                    ],
+                  );
+                  registrosMigrados++;
+                }
+              }
+            }
+          }
+        } catch (errJson) {
+          console.error(`Error al migrar históricos JSON desde ${directorioMonitoreo}:`, errJson);
+        }
+      }
+    }
+
+    res.json({
+      ok: true,
+      usuariosMigrados,
+      registrosMigrados,
+      duplicadosOmitidos,
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      mensaje:
+        "Error durante la migración de datos históricos: " + error.message,
+    });
+  }
+}
+
 module.exports = {
   inicializarPool,
   registrarAuditoria,
@@ -897,9 +1183,11 @@ module.exports = {
   obtenerRegistros,
   escanearDirectorio,
   importarArchivoPdf,
+  obtenerNotables: obtenerNotariasLocales, // mantiene el alias si existía
   obtenerNotariasLocales,
   sincronizarAstronmx,
   sincronizarAstronmxSilencioso,
   obtenerPcsUnicas,
   repararPaginasIncompletas,
+  migrarHistorico,
 };
