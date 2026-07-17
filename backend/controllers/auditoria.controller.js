@@ -460,10 +460,27 @@ async function escanearDirectorio(req, res) {
       } catch (e) {}
 
       // Validar si el archivo ya existe en la base de datos y obtener sus páginas registradas
-      const [rows] = await dbPool.query(
+      let [rows] = await dbPool.query(
         'SELECT id, paginas FROM `auditoria` WHERE archivo = ? AND notaria = ? AND (volumen = ? OR (volumen IS NULL AND ? = "SIN VOLUMEN")) LIMIT 1',
         [archivo, notaria, volumen, volumen],
       );
+
+      // Fallback: si no coincide por notaría/volumen exacto (ej: por unidad de red Z:\ vs C:\, carpetas repetidas o discrepancias de nombres)
+      if (rows.length === 0) {
+        let patronBusqueda = "";
+        if (volumen && volumen !== "SIN VOLUMEN") {
+          patronBusqueda = `%${notaria}%${volumen}%${archivo}%`;
+        } else {
+          patronBusqueda = `%${notaria}%${archivo}%`;
+        }
+        // Reemplazar barras por comodines de porcentaje para coincidir independientemente del formateo del path
+        patronBusqueda = patronBusqueda.replace(/\\/g, "%").replace(/\//g, "%");
+
+        [rows] = await dbPool.query(
+          'SELECT id, paginas FROM `auditoria` WHERE archivo = ? AND detalles LIKE ? LIMIT 1',
+          [archivo, patronBusqueda],
+        );
+      }
 
       const existe = rows.length > 0;
       const paginasReg = existe ? rows[0].paginas || 0 : 0;
@@ -703,35 +720,30 @@ function obtenerPdfsRecursivo(dir, listaArchivos = []) {
   return listaArchivos;
 }
 
-// Extrae notaría y volumen imitando el comportamiento del cliente C#
-function extraerNotariaYVolumenDeRuta(rutaArchivo) {
-  const segmentos = rutaArchivo.split(path.sep);
-  let indiceNotaria = -1;
-  for (let i = 0; i < segmentos.length; i++) {
-    if (
-      segmentos[i].toUpperCase().startsWith("NOTARIA") &&
-      !segmentos[i].toUpperCase().startsWith("NOTARIAS")
-    ) {
-      indiceNotaria = i;
-      break;
-    }
-  }
-
+// Extrae notaría y volumen imitando exactamente al watcher de digitalización (dinámico para Notarias, Nominas y Libros)
+function extraerNotariaYVolumenDeRuta(rutaCompleta) {
+  const rutaNormalizada = rutaCompleta.replace(/\\/g, "/");
+  const partes = rutaNormalizada.split("/");
   let notaria = "General";
   let volumen = "SIN VOLUMEN";
 
-  if (indiceNotaria !== -1) {
-    notaria = segmentos[indiceNotaria].trim();
-    if (indiceNotaria + 1 < segmentos.length - 1) {
-      const sgte = segmentos[indiceNotaria + 1];
-      if (
-        sgte.toUpperCase().startsWith("VOLUMEN") ||
-        sgte.toUpperCase().startsWith("LOTE")
-      ) {
-        volumen = sgte.trim();
-      }
+  const indexNotaria = partes.findIndex((p) => {
+    const u = p.toUpperCase().trim();
+    return (u.startsWith("NOTARIA") && u !== "NOTARIAS") ||
+           (u.startsWith("NOMINA") && u !== "NOMINAS") ||
+           (u.startsWith("LIBRO") && u !== "LIBROS");
+  });
+
+  if (indexNotaria !== -1) {
+    notaria = partes[indexNotaria].trim();
+
+    // Si hay subcarpetas intermedias entre la notaría y el archivo final (.pdf)
+    const indexArchivo = partes.length - 1;
+    if (indexArchivo - 1 > indexNotaria) {
+      volumen = partes[indexArchivo - 1].trim();
     }
   }
+
   return { notaria, volumen };
 }
 
@@ -803,6 +815,12 @@ async function ejecutarSincronizacionAstronmxInterno() {
 // Endpoint HTTP para sincronización manual
 async function sincronizarAstronmx(req, res) {
   try {
+    const { forzar } = req.body || {};
+    if (forzar) {
+      console.log("[SYNC] Forzando resincronización completa. Reseteando exportado a 0...");
+      await dbPool.query("UPDATE `auditoria` SET exportado = 0");
+    }
+
     const resultado = await ejecutarSincronizacionAstronmxInterno();
     if (resultado.sincronizados === 0) {
       return res.json({

@@ -124,11 +124,18 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("panelProgresoSinc").style.display = "block";
       actualizarEstadoCabecera("modalSincronizarAstronmx", "cargando");
 
+      const chkForzar = document.getElementById("chkForzarResinc");
+      const forzar = chkForzar ? chkForzar.checked : false;
+
       try {
         const respuesta = await fetch(
           "http://localhost:3000/api/sincronizar-astronmx",
           {
             method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ forzar })
           },
         );
         const datos = await respuesta.json();
@@ -153,6 +160,7 @@ document.addEventListener("DOMContentLoaded", () => {
         setTimeout(() => {
           cerrarModalSinc();
           actualizarEstadoCabecera("modalSincronizarAstronmx", "normal");
+          if (chkForzar) chkForzar.checked = false;
         }, 3000);
       }
     });

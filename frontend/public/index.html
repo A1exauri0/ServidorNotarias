@@ -181,9 +181,15 @@
                 </div>
             </div>
             <div class="modal-cuerpo" style="padding-top: 15px;">
-                <p style="margin: 0 0 20px 0; font-size: 13.5px; color: var(--color-texto-secundario); line-height: 1.5;">
+                <p style="margin: 0 0 15px 0; font-size: 13.5px; color: var(--color-texto-secundario); line-height: 1.5;">
                     ¿Desea enviar todos los registros de auditoría locales pendientes hacia el servidor central en la nube de Astronmx?
                 </p>
+                <div style="margin: 0 0 20px 0; display: flex; align-items: center; gap: 8px; background-color: var(--color-tarjeta); padding: 10px; border-radius: 8px; border: 1px solid var(--color-tarjeta-borde);">
+                    <input type="checkbox" id="chkForzarResinc" style="width: 16px; height: 16px; cursor: pointer;">
+                    <label for="chkForzarResinc" style="font-size: 12.5px; color: var(--color-texto); cursor: pointer; user-select: none;">
+                        Forzar resincronización (enviar registros ya exportados)
+                    </label>
+                </div>
                 <div id="panelProgresoSinc" style="display: none; margin-bottom: 20px; text-align: center;">
                     <iconify-icon icon="line-md:loading-twotone-loop" style="font-size: 32px; color: #3a6ac9; margin-bottom: 8px;"></iconify-icon>
                     <p style="margin: 0; font-size: 13px; color: var(--color-texto);">Enviando registros en segundo plano...</p>
