@@ -45,7 +45,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (vistaActual === "dashboard") {
       consultarEstadisticas();
     } else if (vistaActual === "registros") {
-      cargarTablaRegistros();
+      cargarTablaRegistros(true); // Forzar filtro de rango de fechas
     } else if (vistaActual === "productividad") {
       inicializarVistaProductividad();
     }
@@ -67,7 +67,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (vistaActual === "dashboard") {
         consultarEstadisticas();
       } else if (vistaActual === "registros") {
-        cargarTablaRegistros();
+        cargarTablaRegistros(false); // Cargar sin filtro estricto de fecha
       } else if (vistaActual === "usuarios") {
         inicializarVistaUsuarios();
       } else if (vistaActual === "productividad") {
@@ -455,7 +455,7 @@ async function cargarVista(nombreVista) {
         elSubtitulo.innerText =
           "Listado detallado de capturas físicas procesadas";
       if (elFiltrosFecha) elFiltrosFecha.style.display = "flex";
-      cargarTablaRegistros();
+      cargarTablaRegistros(false); // Cargar sin filtro estricto de fecha inicial para ver los últimos 100 en general
 
       // Vincular evento de búsqueda del buscador inyectado
       const buscadorRegistros = document.getElementById("buscadorRegistros");
@@ -465,9 +465,6 @@ async function cargarVista(nombreVista) {
           filtrarYRenderizarTabla(termino);
         });
       }
-
-      // El listado de registros se recarga de forma ordinaria
-      cargarTablaRegistros();
     } else if (nombreVista === "usuarios") {
       if (elTitulo) elTitulo.innerText = "Administrar Usuarios";
       if (elSubtitulo)
@@ -816,13 +813,15 @@ function renderizarGraficaTurnos(datosTurnos) {
 }
 
 // Carga la lista de registros en tiempo real desde la API
-async function cargarTablaRegistros() {
+async function cargarTablaRegistros(forzarFiltroFecha = false) {
   try {
-    const fechaInicio = document.getElementById("fechaInicio")?.value;
-    const fechaFin = document.getElementById("fechaFin")?.value;
     let url = "http://localhost:3000/api/registros";
-    if (fechaInicio && fechaFin) {
-      url += `?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`;
+    if (forzarFiltroFecha) {
+      const fechaInicio = document.getElementById("fechaInicio")?.value;
+      const fechaFin = document.getElementById("fechaFin")?.value;
+      if (fechaInicio && fechaFin) {
+        url += `?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`;
+      }
     }
 
     const respuesta = await fetch(url);

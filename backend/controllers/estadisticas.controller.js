@@ -79,6 +79,7 @@ async function obtenerProductividadGeneral(req, res) {
 
     registros.forEach((r) => {
       const { fechaStr, turno } = resolverFechaYTurnoDeJornada(r.fecha_hora);
+      const turnoFinal = r.turno || turno;
       const notaria = r.notaria || "General";
       const volumen = r.volumen || "Sin volumen";
       const paginas = parseInt(r.paginas || 0, 10);
@@ -98,11 +99,11 @@ async function obtenerProductividadGeneral(req, res) {
       agrupadoNotarias[claveNotaria].total_imagenes += paginas;
 
       // 2. Agrupación por Fecha y Turno (para las gráficas de puntos)
-      const claveTurno = `${fechaStr}_${turno}`;
+      const claveTurno = `${fechaStr}_${turnoFinal}`;
       if (!agrupadoTurnos[claveTurno]) {
         agrupadoTurnos[claveTurno] = {
           fecha: fechaStr,
-          turno: turno,
+          turno: turnoFinal,
           total_pdfs: 0,
           total_imagenes: 0
         };
@@ -141,7 +142,7 @@ async function obtenerProductividadDiaria(req, res) {
 
     const [registros] = await dbPool.query(
       `
-            SELECT fecha_hora, usuario, paginas
+            SELECT fecha_hora, usuario, paginas, turno
             FROM \`auditoria\`
             WHERE DATE(fecha_hora) BETWEEN ? AND ?
         `,
@@ -152,15 +153,16 @@ async function obtenerProductividadDiaria(req, res) {
 
     registros.forEach((r) => {
       const { fechaStr, turno } = resolverFechaYTurnoDeJornada(r.fecha_hora);
+      const turnoFinal = r.turno || turno;
       const usuario = r.usuario || "Desconocido";
       const paginas = parseInt(r.paginas || 0, 10);
 
-      const clave = `${fechaStr}_${usuario.toUpperCase()}_${turno}`;
+      const clave = `${fechaStr}_${usuario.toUpperCase()}_${turnoFinal}`;
       if (!agrupadoDiario[clave]) {
         agrupadoDiario[clave] = {
           fecha: fechaStr,
           usuario: usuario,
-          turno: turno,
+          turno: turnoFinal,
           total_pdfs: 0,
           total_paginas: 0
         };
@@ -220,8 +222,9 @@ async function exportarExcelAuditoria(req, res) {
     const registrosPorFecha = {};
     registros.forEach((reg) => {
       const { fechaStr, turno } = resolverFechaYTurnoDeJornada(reg.fecha_hora);
+      const turnoFinal = reg.turno || turno;
       reg.fecha_calculada = fechaStr;
-      reg.turno_calculado = turno;
+      reg.turno_calculado = turnoFinal;
 
       if (!registrosPorFecha[fechaStr]) {
         registrosPorFecha[fechaStr] = [];
