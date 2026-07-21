@@ -12,16 +12,33 @@ let dbPool = null;
 
 // Helper para calcular la fecha fiscal de jornada y el turno en base a los horarios y fines de semana
 function resolverFechaYTurnoDeJornada(fechaHoraStr) {
-  const fecha = new Date(fechaHoraStr);
-  const hora = fecha.getHours();
-  
+  let hora = 0;
+  let fechaJornada;
+
+  if (fechaHoraStr instanceof Date) {
+    hora = fechaHoraStr.getHours();
+    fechaJornada = new Date(fechaHoraStr);
+  } else if (typeof fechaHoraStr === "string") {
+    // La base de datos almacena la hora en formato local. Parseamos el string directamente
+    // para evitar desfases causados por el huso horario del servidor.
+    const partes = fechaHoraStr.split(" ");
+    const fechaPartes = partes[0].split("-");
+    const horaPartes = partes[1].split(":");
+    hora = parseInt(horaPartes[0], 10);
+    fechaJornada = new Date(
+      parseInt(fechaPartes[0], 10),
+      parseInt(fechaPartes[1], 10) - 1,
+      parseInt(fechaPartes[2], 10),
+      12, 0, 0
+    );
+  } else {
+    const d = new Date(fechaHoraStr);
+    hora = d.getHours();
+    fechaJornada = d;
+  }
+
   let turno = "Matutino";
-  let fechaJornada = new Date(fecha);
-  
-  // Horarios de turnos:
-  // matutino: de 6 am a 2 pm (6:00 a 13:59)
-  // vespertino: de 2 pm a 10 pm (14:00 a 21:59)
-  // nocturno: de 10 pm a 6 am (22:00 a 05:59 del dia siguiente)
+
   if (hora >= 6 && hora < 14) {
     turno = "Matutino";
   } else if (hora >= 14 && hora < 22) {
@@ -64,14 +81,24 @@ async function obtenerProductividadGeneral(req, res) {
       });
     }
 
-    // Consultamos los registros brutos en el rango de fechas
+    const limiteFinDate = new Date(fecha_fin + "T12:00:00");
+    limiteFinDate.setDate(limiteFinDate.getDate() + 1);
+    const anioF = limiteFinDate.getFullYear();
+    const mesF = String(limiteFinDate.getMonth() + 1).padStart(2, "0");
+    const diaF = String(limiteFinDate.getDate()).padStart(2, "0");
+    const fechaFinMas1 = `${anioF}-${mesF}-${diaF}`;
+
+    const fechaInicioCompleta = `${fecha_inicio} 06:00:00`;
+    const fechaFinCompleta = `${fechaFinMas1} 05:59:59`;
+
+    // Consultamos los registros brutos en el rango de fecha/hora de jornada
     const [registros] = await dbPool.query(
       `
-            SELECT fecha_hora, notaria, volumen, paginas, turno
+            SELECT DATE_FORMAT(fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, notaria, volumen, paginas, turno
             FROM \`auditoria\`
-            WHERE DATE(fecha_hora) BETWEEN ? AND ?
+            WHERE fecha_hora >= ? AND fecha_hora <= ?
         `,
-      [fecha_inicio, fecha_fin],
+      [fechaInicioCompleta, fechaFinCompleta],
     );
 
     const agrupadoNotarias = {};
@@ -79,7 +106,7 @@ async function obtenerProductividadGeneral(req, res) {
 
     registros.forEach((r) => {
       const { fechaStr, turno } = resolverFechaYTurnoDeJornada(r.fecha_hora);
-      const turnoFinal = r.turno || turno;
+      const turnoFinal = turno; // Clasificación estricta por rango de horario
       const notaria = r.notaria || "General";
       const volumen = r.volumen || "Sin volumen";
       const paginas = parseInt(r.paginas || 0, 10);
@@ -140,20 +167,30 @@ async function obtenerProductividadDiaria(req, res) {
       });
     }
 
+    const limiteFinDate = new Date(fecha_fin + "T12:00:00");
+    limiteFinDate.setDate(limiteFinDate.getDate() + 1);
+    const anioF = limiteFinDate.getFullYear();
+    const mesF = String(limiteFinDate.getMonth() + 1).padStart(2, "0");
+    const diaF = String(limiteFinDate.getDate()).padStart(2, "0");
+    const fechaFinMas1 = `${anioF}-${mesF}-${diaF}`;
+
+    const fechaInicioCompleta = `${fecha_inicio} 06:00:00`;
+    const fechaFinCompleta = `${fechaFinMas1} 05:59:59`;
+
     const [registros] = await dbPool.query(
       `
-            SELECT fecha_hora, usuario, paginas, turno
+            SELECT DATE_FORMAT(fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, usuario, paginas, turno
             FROM \`auditoria\`
-            WHERE DATE(fecha_hora) BETWEEN ? AND ?
+            WHERE fecha_hora >= ? AND fecha_hora <= ?
         `,
-      [fecha_inicio, fecha_fin],
+      [fechaInicioCompleta, fechaFinCompleta],
     );
 
     const agrupadoDiario = {};
 
     registros.forEach((r) => {
       const { fechaStr, turno } = resolverFechaYTurnoDeJornada(r.fecha_hora);
-      const turnoFinal = r.turno || turno;
+      const turnoFinal = turno; // Clasificación estricta por rango de horario
       const usuario = r.usuario || "Desconocido";
       const paginas = parseInt(r.paginas || 0, 10);
 
@@ -201,14 +238,26 @@ async function exportarExcelAuditoria(req, res) {
       });
     }
 
-    // Consultar todos los registros en el rango de fechas
+    // Limitar la consulta al inicio de jornada de fecha_inicio (06:00:00) 
+    // hasta el final de jornada de fecha_fin (05:59:59 del dia siguiente)
+    const limiteFinDate = new Date(fecha_fin + "T12:00:00");
+    limiteFinDate.setDate(limiteFinDate.getDate() + 1);
+    const anioF = limiteFinDate.getFullYear();
+    const mesF = String(limiteFinDate.getMonth() + 1).padStart(2, "0");
+    const diaF = String(limiteFinDate.getDate()).padStart(2, "0");
+    const fechaFinMas1 = `${anioF}-${mesF}-${diaF}`;
+
+    const fechaInicioCompleta = `${fecha_inicio} 06:00:00`;
+    const fechaFinCompleta = `${fechaFinMas1} 05:59:59`;
+
+    // Consultar todos los registros en el rango de fecha/hora de jornada
     const [registros] = await dbPool.query(
       `
-            SELECT id, fecha_hora, turno, usuario, pc, ip, notaria, volumen, archivo, paginas, exportado, lugar_trabajo 
+            SELECT id, DATE_FORMAT(fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, turno, usuario, pc, ip, notaria, volumen, archivo, paginas, exportado, lugar_trabajo 
             FROM \`auditoria\`
-            WHERE DATE(fecha_hora) BETWEEN ? AND ?
+            WHERE fecha_hora >= ? AND fecha_hora <= ?
         `,
-      [fecha_inicio, fecha_fin],
+      [fechaInicioCompleta, fechaFinCompleta],
     );
 
     if (registros.length === 0) {
@@ -222,7 +271,7 @@ async function exportarExcelAuditoria(req, res) {
     const registrosPorFecha = {};
     registros.forEach((reg) => {
       const { fechaStr, turno } = resolverFechaYTurnoDeJornada(reg.fecha_hora);
-      const turnoFinal = reg.turno || turno;
+      const turnoFinal = turno; // Clasificación estricta por rango de horario
       reg.fecha_calculada = fechaStr;
       reg.turno_calculado = turnoFinal;
 
