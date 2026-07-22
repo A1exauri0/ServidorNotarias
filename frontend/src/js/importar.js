@@ -258,17 +258,17 @@ async function cargarArchivosDeVolumen(
           claseEstado = "no-registrado";
           textoEstado = "❌ Sin registro en BD";
           chkHabilitado = false;
-          chkChecked = false;
+          chkChecked = false; // No se manda
         } else if (omitidoCompleto) {
           claseEstado = "completo";
           textoEstado = `✔ Registrado (${item.paginasRegistradas} pág.)`;
           chkHabilitado = true;
-          chkChecked = false;
+          chkChecked = true; // Sí se manda por defecto
         } else if (requiereCorreccion) {
           claseEstado = "incompleto";
           textoEstado = `⚠️ Incompleto (${item.paginasRegistradas} pág.)`;
           chkHabilitado = false;
-          chkChecked = false;
+          chkChecked = false; // No se manda
         }
 
         if (esPesado) {
@@ -334,14 +334,6 @@ async function cargarArchivosDeVolumen(
 
 // Ejecuta la transferencia masiva de todos los archivos PDF seleccionados en el árbol
 async function ejecutarTransferenciaMasiva() {
-  const checksSeleccionados = document.querySelectorAll(
-    ".chk-archivo-pdf:checked:not(:disabled)",
-  );
-  if (checksSeleccionados.length === 0) {
-    alert("No hay archivos PDF marcados en el árbol para transferir.");
-    return;
-  }
-
   const btnTransferir = document.getElementById("btnTransferirTodo");
   if (btnTransferir) btnTransferir.disabled = true;
 
@@ -354,6 +346,86 @@ async function ejecutarTransferenciaMasiva() {
   if (barraContenedor) barraContenedor.style.display = "block";
   if (lblEstado) lblEstado.textContent = "";
 
+  // --- Paso 1: Cargar automáticamente los volúmenes que aún no se han escaneado ---
+  const notariasMarcadas = document.querySelectorAll(".chk-notaria:checked");
+  const volumenesMarcados = document.querySelectorAll(".chk-volumen:checked");
+
+  // Recopilar los contenedores de archivos que necesitan cargarse
+  const contenedoresPendientes = [];
+
+  // Desde notarías marcadas: buscar todos sus volúmenes
+  notariasMarcadas.forEach((chkNot) => {
+    const notariaId = chkNot.dataset.notariaId;
+    const nodoNotaria = document.getElementById(`nodo_notaria_${notariaId}`);
+    if (!nodoNotaria) return;
+    const listasArchivos = nodoNotaria.querySelectorAll(".lista-archivos-pdf");
+    listasArchivos.forEach((lista) => {
+      if (lista.dataset.cargado === "false") {
+        contenedoresPendientes.push(lista);
+      }
+    });
+  });
+
+  // Desde volúmenes marcados individualmente
+  volumenesMarcados.forEach((chkVol) => {
+    const volumenId = chkVol.dataset.volumenId;
+    const lista = document.getElementById(`lista_archivos_${volumenId}`);
+    if (lista && lista.dataset.cargado === "false") {
+      // Evitar duplicados
+      if (!contenedoresPendientes.includes(lista)) {
+        contenedoresPendientes.push(lista);
+      }
+    }
+  });
+
+  // Si no hay ninguna notaría ni volumen seleccionado
+  if (notariasMarcadas.length === 0 && volumenesMarcados.length === 0) {
+    alert("Selecciona al menos una notaría o volumen para transferir.");
+    if (btnTransferir) btnTransferir.disabled = false;
+    if (barraContenedor) barraContenedor.style.display = "none";
+    return;
+  }
+
+  // Escanear los volúmenes pendientes antes de transferir
+  if (contenedoresPendientes.length > 0) {
+    if (lblTexto) lblTexto.textContent = `Escaneando ${contenedoresPendientes.length} volumen(es) pendientes...`;
+    if (barra) barra.style.width = "0%";
+
+    for (let i = 0; i < contenedoresPendientes.length; i++) {
+      const lista = contenedoresPendientes[i];
+      const volumenId = lista.id.replace("lista_archivos_", "");
+      const pctEscaneo = Math.round(((i + 1) / contenedoresPendientes.length) * 50);
+      if (barra) barra.style.width = `${pctEscaneo}%`;
+      if (lblPct) lblPct.textContent = `${pctEscaneo}%`;
+      if (lblTexto) lblTexto.textContent = `Escaneando volumen ${i + 1} de ${contenedoresPendientes.length}...`;
+
+      await cargarArchivosDeVolumen(
+        lista.dataset.rutaEscaneo,
+        lista,
+        volumenId,
+      );
+      // Hacer visible el contenedor para que los checkboxes estén accesibles
+      lista.style.display = "block";
+    }
+  }
+
+  // --- Paso 2: Recolectar los archivos habilitados y marcados ---
+  const checksSeleccionados = document.querySelectorAll(
+    ".chk-archivo-pdf:checked:not(:disabled)",
+  );
+
+  if (checksSeleccionados.length === 0) {
+    if (lblTexto) {
+      lblTexto.textContent = "No se encontraron archivos válidos para transferir (todos están sin registro o incompletos).";
+      lblTexto.style.color = "#eb5584";
+    }
+    if (barra) barra.style.width = "100%";
+    if (lblPct) lblPct.textContent = "100%";
+    if (btnTransferir) btnTransferir.disabled = false;
+    return;
+  }
+
+  // --- Paso 3: Transferir ---
   let procesadosOk = 0;
   let errores = 0;
   const total = checksSeleccionados.length;
@@ -368,7 +440,7 @@ async function ejecutarTransferenciaMasiva() {
     // Actualizar progreso e interfaz visual en el nodo correspondiente
     if (lblTexto)
       lblTexto.textContent = `Transfiriendo ${i + 1} de ${total}: ${datosArchivo.archivo}`;
-    const pct = Math.round((i / total) * 100);
+    const pct = 50 + Math.round(((i + 1) / total) * 50);
     if (barra) barra.style.width = `${pct}%`;
     if (lblPct) lblPct.textContent = `${pct}%`;
 

@@ -202,24 +202,18 @@ async function subirPdf(req, res) {
     const carpetaDestinoFinal = path.join(baseDestino, subcarpeta);
     const rutaDestinoArchivo = path.join(carpetaDestinoFinal, archivoOriginal);
 
-    // Si es una simulación fake de Electron (no tiene req.file.destination)
-    if (!req.file.destination) {
-      // Asegurar que el directorio destino exista
-      if (!fs.existsSync(carpetaDestinoFinal)) {
-        fs.mkdirSync(carpetaDestinoFinal, { recursive: true });
-      }
-
-      // Copiar el archivo original local al almacenamiento de ssdirec (NUNCA mover ni eliminar el original)
-      if (rutaCompletaTemporal !== rutaDestinoArchivo) {
-        fs.copyFileSync(rutaCompletaTemporal, rutaDestinoArchivo);
-      }
-      rutaFinalArchivo = rutaDestinoArchivo;
-    } else {
-      // Si es una subida multipart real de Multer, Multer ya guardó el archivo en req.file.path
-      rutaFinalArchivo = rutaCompletaTemporal;
+    // Asegurar que el directorio de destino exista de forma asíncrona
+    if (!fs.existsSync(carpetaDestinoFinal)) {
+      await fs.promises.mkdir(carpetaDestinoFinal, { recursive: true });
     }
 
-    // Contar páginas de forma asíncrona sobre el archivo en su ruta final
+    // Copiar de forma asíncrona para liberar por completo el Event Loop de Node.js
+    if (rutaCompletaTemporal !== rutaDestinoArchivo) {
+      await fs.promises.copyFile(rutaCompletaTemporal, rutaDestinoArchivo);
+    }
+    rutaFinalArchivo = rutaDestinoArchivo;
+
+    // Contar páginas directamente sobre el archivo en su ruta final
     paginasFisicas = await contarPaginasPdf(rutaFinalArchivo);
 
     // Validar si ya existe el registro en la base de datos
@@ -272,13 +266,13 @@ async function subirPdf(req, res) {
       await dbPool.query(sqlInsert, paramsInsert);
     }
 
-    // Si la importación fue exitosa y proviene de la simulación de Electron, eliminamos el archivo local de origen (cortar)
-    if (!req.file.destination && fs.existsSync(rutaCompletaTemporal)) {
+    // Borrado asíncrono del archivo origen/temporal procesado para no dejar copias duplicadas
+    if (fs.existsSync(rutaCompletaTemporal)) {
       try {
-        fs.unlinkSync(rutaCompletaTemporal);
+        await fs.promises.unlink(rutaCompletaTemporal);
       } catch (errUnlink) {
         console.warn(
-          "No se pudo eliminar el archivo origen local en la simulación:",
+          "No se pudo eliminar el archivo origen/temporal tras la copia:",
           errUnlink.message,
         );
       }
@@ -437,15 +431,22 @@ async function escanearDirectorio(req, res) {
       }
     }
 
+    console.log("[DEBUG ESCANEO] req.body:", req.body);
+
     if (!fs.existsSync(rutaDirectorio)) {
+      console.log("[DEBUG ESCANEO] La ruta no existe:", rutaDirectorio);
       return res.status(400).json({
         ok: false,
         mensaje: `La ruta del directorio no existe en el disco local: ${rutaDirectorio}`,
       });
     }
 
+    console.log("[DEBUG ESCANEO] Ruta resuelta existe:", rutaDirectorio);
+
     const archivosPdf = [];
     obtenerPdfsRecursivo(rutaDirectorio, archivosPdf);
+
+    console.log("[DEBUG ESCANEO] PDFs encontrados:", archivosPdf.length, archivosPdf.slice(0, 5));
 
     const listadoResultados = [];
     for (const rutaCompleta of archivosPdf) {
@@ -531,8 +532,8 @@ async function importarArchivoPdf(req, res) {
     const statObj = fs.statSync(rutaCompleta);
     const tamanioMb = statObj.size / (1024 * 1024);
 
-    // Si el archivo es menor a 500 MB, simular y procesar a través de la tubería del endpoint de subida (subirPdf)
-    if (tamanioMb < 500) {
+    // Si el archivo es menor a 200 MB, simular y procesar a través de la tubería del endpoint de subida (subirPdf)
+    if (tamanioMb < 200) {
       // Creamos un req fake que emule el objeto req.file de multer
       const reqFake = {
         file: {
@@ -551,13 +552,7 @@ async function importarArchivoPdf(req, res) {
       return await subirPdf(reqFake, res);
     }
 
-    // Para archivos de más de 500 MB: Omitir endpoint de subida (evita out-of-memory) y hacer copia directa y registro
-    const [rows] = await dbPool.query(
-      'SELECT id, paginas FROM `auditoria` WHERE archivo = ? AND notaria = ? AND (volumen = ? OR (volumen IS NULL AND ? = "SIN VOLUMEN")) LIMIT 1',
-      [archivo, notaria, volumen, volumen],
-    );
-
-    const existeRegistro = rows.length > 0;
+    // Para archivos de más de 200 MB: Copiar de forma asíncrona a red y registrar
     const tipoCaptura = (req.body.tipo_captura || "NOTARIAS").toUpperCase();
     const baseDestino = process.env.RUTA_SSDIREC || "\\\\172.40.5.84\\ssdirec";
     const subcarpeta =
@@ -566,6 +561,13 @@ async function importarArchivoPdf(req, res) {
         : path.join(tipoCaptura, notaria);
     const carpetaDestinoFinal = path.join(baseDestino, subcarpeta);
     const rutaDestinoArchivo = path.join(carpetaDestinoFinal, archivo);
+
+    const [rows] = await dbPool.query(
+      'SELECT id, paginas FROM `auditoria` WHERE archivo = ? AND notaria = ? AND (volumen = ? OR (volumen IS NULL AND ? = "SIN VOLUMEN")) LIMIT 1',
+      [archivo, notaria, volumen, volumen],
+    );
+
+    const existeRegistro = rows.length > 0;
 
     if (existeRegistro) {
       const registroId = rows[0].id;
@@ -578,69 +580,62 @@ async function importarArchivoPdf(req, res) {
           [paginasReales, registroId],
         );
 
+        // Copiar asíncronamente a red
         if (!fs.existsSync(carpetaDestinoFinal)) {
-          fs.mkdirSync(carpetaDestinoFinal, { recursive: true });
+          await fs.promises.mkdir(carpetaDestinoFinal, { recursive: true });
         }
         if (rutaCompleta !== rutaDestinoArchivo) {
-          fs.copyFileSync(rutaCompleta, rutaDestinoArchivo);
+          await fs.promises.copyFile(rutaCompleta, rutaDestinoArchivo);
         }
 
-        // Eliminar el archivo local de origen (cortar) tras copiarlo y registrarlo con éxito
+        // Borrar asíncronamente el origen local
         if (fs.existsSync(rutaCompleta)) {
           try {
-            fs.unlinkSync(rutaCompleta);
+            await fs.promises.unlink(rutaCompleta);
           } catch (errUnlink) {
-            console.warn(
-              "No se pudo eliminar el archivo original pesado tras actualizar:",
-              errUnlink.message,
-            );
+            console.warn("No se pudo eliminar el original pesado tras actualizar:", errUnlink.message);
           }
         }
 
         return res.json({
           ok: true,
-          mensaje: `Archivo pesado copiado directamente. Registro existente actualizado de ${paginasRegistradas} a ${paginasReales} páginas.`,
+          mensaje: `Archivo pesado copiado y registrado. Registro existente actualizado de ${paginasRegistradas} a ${paginasReales} páginas.`,
           paginas: paginasReales,
           accion: "actualizado",
         });
       } else {
-        if (rutaCompleta !== rutaDestinoArchivo) {
-          if (!fs.existsSync(carpetaDestinoFinal)) {
-            fs.mkdirSync(carpetaDestinoFinal, { recursive: true });
-          }
-          if (!fs.existsSync(rutaDestinoArchivo)) {
-            fs.copyFileSync(rutaCompleta, rutaDestinoArchivo);
-          }
+        // Si ya está registrado con páginas válidas, igual asegurar copia en red
+        if (!fs.existsSync(carpetaDestinoFinal)) {
+          await fs.promises.mkdir(carpetaDestinoFinal, { recursive: true });
+        }
+        if (rutaCompleta !== rutaDestinoArchivo && !fs.existsSync(rutaDestinoArchivo)) {
+          await fs.promises.copyFile(rutaCompleta, rutaDestinoArchivo);
         }
 
-        // Si ya existe correcto, lo removemos de origen para no dejar duplicados
+        // Eliminar original local
         if (fs.existsSync(rutaCompleta)) {
           try {
-            fs.unlinkSync(rutaCompleta);
+            await fs.promises.unlink(rutaCompleta);
           } catch (errUnlink) {
-            console.warn(
-              "No se pudo eliminar el archivo original pesado ya existente:",
-              errUnlink.message,
-            );
+            console.warn("No se pudo eliminar el original pesado ya existente:", errUnlink.message);
           }
         }
 
         return res.json({
           ok: true,
-          mensaje: "El registro pesado ya existe con páginas válidas.",
+          mensaje: "El registro pesado ya existe y fue transferido a red.",
           paginas: paginasRegistradas,
           accion: "omitido",
         });
       }
     }
 
-    // 2. Si no existe, se procede al registro normal
+    // 2. Si no existe en BD
     if (!fs.existsSync(carpetaDestinoFinal)) {
-      fs.mkdirSync(carpetaDestinoFinal, { recursive: true });
+      await fs.promises.mkdir(carpetaDestinoFinal, { recursive: true });
     }
-
     if (rutaCompleta !== rutaDestinoArchivo) {
-      fs.copyFileSync(rutaCompleta, rutaDestinoArchivo);
+      await fs.promises.copyFile(rutaCompleta, rutaDestinoArchivo);
     }
 
     const paginas = await contarPaginasPdf(rutaDestinoArchivo);
@@ -672,28 +667,25 @@ async function importarArchivoPdf(req, res) {
 
     await dbPool.query(sqlInsert, paramsInsert);
 
-    // Eliminar el archivo local de origen (cortar) tras copiarlo y registrarlo con éxito en MySQL
+    // Eliminar original local tras copiar y registrar exitosamente
     if (fs.existsSync(rutaCompleta)) {
       try {
-        fs.unlinkSync(rutaCompleta);
+        await fs.promises.unlink(rutaCompleta);
       } catch (errUnlink) {
-        console.warn(
-          "No se pudo eliminar el archivo original pesado tras registrar:",
-          errUnlink.message,
-        );
+        console.warn("No se pudo eliminar el original pesado tras registrar:", errUnlink.message);
       }
     }
 
     res.json({
       ok: true,
-      mensaje: `Archivo ${archivo} importado y registrado correctamente.`,
+      mensaje: `Archivo pesado ${archivo} importado y copiado a red correctamente.`,
       paginas,
       accion: "registrado",
     });
   } catch (error) {
     res.status(500).json({
       ok: false,
-      mensaje: `Error al importar archivo: ${error.message}`,
+      mensaje: `Error al importar archivo pesado: ${error.message}`,
     });
   }
 }

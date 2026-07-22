@@ -20,7 +20,7 @@ const almacenamiento = multer.diskStorage({
             notaria = 'General';
         }
 
-        const rutaBase = process.env.RUTA_SSDIREC || 'C:\\laragon\\www\\ssdirec';
+        const rutaBase = process.env.RUTA_SSDIREC || '\\\\172.40.5.84\\ssdirec';
         const rutaDestino = path.join(rutaBase, tipoCaptura, notaria);
 
         // Crear la carpeta física si no existe
