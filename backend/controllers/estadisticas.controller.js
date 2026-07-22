@@ -19,18 +19,26 @@ function resolverFechaYTurnoDeJornada(fechaHoraStr) {
     hora = fechaHoraStr.getHours();
     fechaJornada = new Date(fechaHoraStr);
   } else if (typeof fechaHoraStr === "string") {
-    // La base de datos almacena la hora en formato local. Parseamos el string directamente
-    // para evitar desfases causados por el huso horario del servidor.
-    const partes = fechaHoraStr.split(" ");
-    const fechaPartes = partes[0].split("-");
-    const horaPartes = partes[1].split(":");
-    hora = parseInt(horaPartes[0], 10);
-    fechaJornada = new Date(
-      parseInt(fechaPartes[0], 10),
-      parseInt(fechaPartes[1], 10) - 1,
-      parseInt(fechaPartes[2], 10),
-      12, 0, 0
-    );
+    // La base de datos central almacena la hora en UTC. Al agregar 'Z' indicamos a JavaScript
+    // que el string está en UTC para que lo convierta automáticamente a la hora local del sistema.
+    const stringIso = fechaHoraStr.replace(" ", "T") + "Z";
+    const d = new Date(stringIso);
+
+    if (!isNaN(d.getTime())) {
+      hora = d.getHours();
+      fechaJornada = d;
+    } else {
+      const partes = fechaHoraStr.split(" ");
+      const fechaPartes = partes[0].split("-");
+      const horaPartes = partes[1].split(":");
+      hora = parseInt(horaPartes[0], 10);
+      fechaJornada = new Date(
+        parseInt(fechaPartes[0], 10),
+        parseInt(fechaPartes[1], 10) - 1,
+        parseInt(fechaPartes[2], 10),
+        12, 0, 0
+      );
+    }
   } else {
     const d = new Date(fechaHoraStr);
     hora = d.getHours();
@@ -229,7 +237,7 @@ async function obtenerProductividadDiaria(req, res) {
 // Genera un archivo Excel premium coloreado por turno y agrupado por fecha y lo abre automáticamente
 async function exportarExcelAuditoria(req, res) {
   try {
-    const { fecha_inicio, fecha_fin } = req.query;
+    const { fecha_inicio, fecha_fin, tipo } = req.query;
     if (!fecha_inicio || !fecha_fin) {
       return res.status(400).json({
         ok: false,
@@ -250,12 +258,26 @@ async function exportarExcelAuditoria(req, res) {
     const fechaInicioCompleta = `${fecha_inicio} 06:00:00`;
     const fechaFinCompleta = `${fechaFinMas1} 05:59:59`;
 
-    // Consultar todos los registros en el rango de fecha/hora de jornada
+    // Consultar todos los registros en el rango de fecha/hora de jornada, uniendo con usuarios
     const [registros] = await dbPool.query(
       `
-            SELECT id, DATE_FORMAT(fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, turno, usuario, pc, ip, notaria, volumen, archivo, paginas, exportado, lugar_trabajo 
-            FROM \`auditoria\`
-            WHERE fecha_hora >= ? AND fecha_hora <= ?
+            SELECT 
+                a.id, 
+                DATE_FORMAT(a.fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, 
+                a.turno, 
+                a.usuario, 
+                COALESCE(u.nombre_completo, UPPER(a.usuario)) AS nombre_completo,
+                a.pc, 
+                a.ip, 
+                a.notaria, 
+                a.volumen, 
+                a.archivo, 
+                a.paginas, 
+                a.exportado, 
+                a.lugar_trabajo 
+            FROM \`auditoria\` a
+            LEFT JOIN \`usuarios\` u ON a.usuario = u.nombre_usuario
+            WHERE a.fecha_hora >= ? AND a.fecha_hora <= ?
         `,
       [fechaInicioCompleta, fechaFinCompleta],
     );
@@ -329,7 +351,204 @@ async function exportarExcelAuditoria(req, res) {
       });
     });
 
-    // 3. Agrupar por Fecha -> PC -> IP -> Usuario -> Turno
+    // 3. Si se solicita formato concentrado, generar el reporte matricial en una sola hoja
+    if (tipo === "concentrado") {
+      const fechasOrdenadas = [...new Set(registrosDeduplicados.map((r) => r.fecha_calculada))].sort(
+        (a, b) => new Date(a) - new Date(b),
+      );
+
+      const mapaGeneral = {};
+      registrosDeduplicados.forEach((reg) => {
+        const nombreKey = reg.nombre_completo.toUpperCase();
+        // Obtener el turno oficial de la base de datos o el calculado por horario como fallback
+        const turnoOficial = (reg.turno || reg.turno_calculado || "Matutino").toUpperCase();
+
+        if (!mapaGeneral[nombreKey]) {
+          mapaGeneral[nombreKey] = {
+            nombre: nombreKey,
+            turno: turnoOficial,
+            capturasPorFecha: {}, // fechaStr -> { pdfs, imagenes }
+          };
+        }
+        const fecha = reg.fecha_calculada;
+        if (!mapaGeneral[nombreKey].capturasPorFecha[fecha]) {
+          mapaGeneral[nombreKey].capturasPorFecha[fecha] = { pdfs: 0, imagenes: 0 };
+        }
+        mapaGeneral[nombreKey].capturasPorFecha[fecha].pdfs += 1;
+        mapaGeneral[nombreKey].capturasPorFecha[fecha].imagenes += reg.paginas > 0 ? reg.paginas : 1;
+      });
+
+      const capturistasYTurnos = Object.values(mapaGeneral).sort((a, b) => {
+        const turnosOrden = { MATUTINO: 1, VESPERTINO: 2, NOCTURNO: 3 };
+        const ordenA = turnosOrden[a.turno] || 4;
+        const ordenB = turnosOrden[b.turno] || 4;
+
+        if (ordenA !== ordenB) {
+          return ordenA - ordenB; // Agrupar por bloques de turno: Matutino, luego Vespertino, al final Nocturno
+        }
+        return a.nombre.localeCompare(b.nombre); // Alfabéticamente dentro del mismo turno
+      });
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Concentrado General");
+
+      // Pintar y dar formato a todas las celdas de la cabecera (Filas 1 y 2) antes de combinarlas
+      const totalColumnas = 3 + fechasOrdenadas.length * 2 + 1;
+      for (let r = 1; r <= 2; r++) {
+        const row = worksheet.getRow(r);
+        row.height = r === 1 ? 25 : 20;
+        for (let c = 1; c <= totalColumnas; c++) {
+          const cell = row.getCell(c);
+          cell.font = { name: "Outfit", bold: true, size: 10, color: { argb: "FFFFFF" } };
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "4F81BD" },
+          };
+          cell.border = {
+            top: { style: "thin", color: { argb: "D9D9D9" } },
+            left: { style: "thin", color: { argb: "D9D9D9" } },
+            bottom: { style: "thin", color: { argb: "D9D9D9" } },
+            right: { style: "thin", color: { argb: "D9D9D9" } },
+          };
+          cell.alignment = { vertical: "middle", horizontal: "center" };
+        }
+      }
+
+      // Combinar columnas estáticas de la cabecera
+      worksheet.mergeCells("A1:A2");
+      worksheet.getRow(1).getCell(1).value = "NOMBRE";
+      worksheet.mergeCells("B1:B2");
+      worksheet.getRow(1).getCell(2).value = "TURNO";
+
+      // Combinar e inyectar cabeceras de fechas
+      fechasOrdenadas.forEach((fecha, i) => {
+        const colInicio = 3 + i * 2;
+        const colFin = 3 + i * 2 + 1;
+        worksheet.mergeCells(1, colInicio, 1, colFin);
+
+        const partesFecha = fecha.split("-");
+        const fechaFormateada = `${partesFecha[2]}/${partesFecha[1]}/${partesFecha[0]}`;
+        worksheet.getRow(1).getCell(colInicio).value = fechaFormateada;
+        worksheet.getRow(2).getCell(colInicio).value = "PDFS";
+        worksheet.getRow(2).getCell(colFin).value = "IMÁGENES";
+      });
+
+      // Combinar e inyectar cabeceras de Total General al final
+      const colInicioTotal = 3 + fechasOrdenadas.length * 2;
+      const colFinTotal = 3 + fechasOrdenadas.length * 2 + 1;
+      worksheet.mergeCells(1, colInicioTotal, 1, colFinTotal);
+      worksheet.getRow(1).getCell(colInicioTotal).value = "TOTAL GENERAL";
+      worksheet.getRow(2).getCell(colInicioTotal).value = "PDFS";
+      worksheet.getRow(2).getCell(colFinTotal).value = "IMÁGENES";
+
+      // Configurar anchos de columna
+      worksheet.getColumn(1).width = 32;
+      worksheet.getColumn(2).width = 15;
+      for (let col = 3; col <= totalColumnas; col++) {
+        worksheet.getColumn(col).width = 12;
+      }
+
+      // Escribir registros de capturistas
+      capturistasYTurnos.forEach((fila, idx) => {
+        const rowData = [];
+        rowData[1] = fila.nombre;
+        rowData[2] = fila.turno;
+
+        let sumPdfs = 0;
+        let sumImagenes = 0;
+
+        fechasOrdenadas.forEach((fecha, i) => {
+          const colInicio = 3 + i * 2;
+          const colFin = 3 + i * 2 + 1;
+          const datosDia = fila.capturasPorFecha[fecha];
+
+          if (datosDia) {
+            rowData[colInicio] = datosDia.pdfs;
+            rowData[colFin] = datosDia.imagenes;
+            sumPdfs += datosDia.pdfs;
+            sumImagenes += datosDia.imagenes;
+          } else {
+            rowData[colInicio] = "";
+            rowData[colFin] = "";
+          }
+        });
+
+        // Escribir los totales al final de la fila
+        rowData[colInicioTotal] = sumPdfs;
+        rowData[colFinTotal] = sumImagenes;
+
+        const row = worksheet.addRow(rowData);
+        row.height = 20;
+
+        // Definir color de fondo según el turno
+        let colorHex = "F2F2F2";
+        const turnoLower = fila.turno.toLowerCase();
+        if (turnoLower === "matutino") {
+          colorHex = "FFF2CC"; // Amarillo pastel
+        } else if (turnoLower === "vespertino") {
+          colorHex = "E2EFDA"; // Verde pastel
+        } else if (turnoLower === "nocturno") {
+          colorHex = "DDEBF7"; // Azul pastel
+        }
+
+        // Estilos para todas las celdas de la fila de datos
+        row.eachCell({ includeEmpty: true }, (cell, colNum) => {
+          cell.font = { name: "Inter", size: 10 };
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: colorHex },
+          };
+          cell.border = {
+            top: { style: "thin", color: { argb: "D9D9D9" } },
+            left: { style: "thin", color: { argb: "D9D9D9" } },
+            bottom: { style: "thin", color: { argb: "D9D9D9" } },
+            right: { style: "thin", color: { argb: "D9D9D9" } },
+          };
+
+          if (colNum === 1) {
+            cell.alignment = { vertical: "middle", horizontal: "left" };
+          } else if (colNum === 2) {
+            cell.alignment = { vertical: "middle", horizontal: "center" };
+          } else {
+            cell.alignment = { vertical: "middle", horizontal: "center" };
+          }
+        });
+      });
+
+      // Generar nombre de archivo con timestamp
+      const ahora = new Date();
+      const anio = ahora.getFullYear();
+      const mes = String(ahora.getMonth() + 1).padStart(2, "0");
+      const dia = String(ahora.getDate()).padStart(2, "0");
+      const hora = String(ahora.getHours()).padStart(2, "0");
+      const min = String(ahora.getMinutes()).padStart(2, "0");
+      const nombreArchivo = `Reporte_Concentrado_Auditoria_${anio}${mes}${dia}_${hora}${min}.xlsx`;
+
+      const carpetaDescargas = path.join(
+        process.env.USERPROFILE || process.env.HOME || "C:\\",
+        "Downloads",
+      );
+      const rutaCompleta = path.join(carpetaDescargas, nombreArchivo);
+
+      await workbook.xlsx.writeFile(rutaCompleta);
+
+      // Abrir archivo automáticamente
+      exec(`start "" "${rutaCompleta}"`, (err) => {
+        if (err) {
+          console.error("Error al abrir Excel automáticamente:", err);
+        }
+      });
+
+      return res.json({
+        ok: true,
+        mensaje: "Reporte Excel concentrado generado y abierto con éxito.",
+        ruta: rutaCompleta,
+      });
+    }
+
+    // 4. Agrupar por Fecha -> PC -> IP -> Usuario -> Turno (Para el formato Detallado por pestañas)
     const registrosAgrupados = {};
     registrosDeduplicados.forEach((reg) => {
       const fecha = reg.fecha_calculada;

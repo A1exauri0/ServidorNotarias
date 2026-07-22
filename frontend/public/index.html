@@ -156,6 +156,16 @@
                             </div>
                         </div>
                     </div>
+                    <div class="campo-formulario" style="margin-bottom: 20px;">
+                        <label>Tipo de Reporte:</label>
+                        <div class="custom-select-wrapper" id="wrapperExcelTipoReporte" style="width: 100%;">
+                            <button type="button" class="custom-select-btn" id="btnExcelTipoReporte" data-valor="detallado" style="width: 100%; text-align: left; height: 38px;">Detallado (Una pestaña por día)</button>
+                            <div class="custom-select-options" id="optionsExcelTipoReporte" style="width: 100%;">
+                                <div class="custom-select-option seleccionado" data-valor="detallado">Detallado (Una pestaña por día)</div>
+                                <div class="custom-select-option" data-valor="concentrado">Concentrado (Todo en una sola hoja por fechas)</div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="modal-acciones" style="display: flex; justify-content: flex-end; gap: 10px;">
                         <button type="button" id="btnCancelarExcel" class="btn-filtrar" style="background-color: transparent; border: 1px solid var(--color-tarjeta-borde); color: var(--color-texto-secundario); height: 38px; padding: 0 20px;">Cancelar</button>
                         <button type="submit" class="btn-filtrar" style="background-color: #2ebd75; border-color: #2ebd75; color: white; height: 38px; padding: 0 20px; font-weight: 600;">Generar Excel</button>

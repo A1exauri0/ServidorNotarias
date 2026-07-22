@@ -37,6 +37,13 @@ function actualizarEstadoCabecera(idModal, estado) {
 document.addEventListener("DOMContentLoaded", () => {
   establecerFechasPorDefecto();
 
+  // Cerrar selectores personalizados al hacer clic en cualquier parte fuera de ellos
+  document.addEventListener("click", () => {
+    document.querySelectorAll(".custom-select-wrapper").forEach((w) => {
+      w.classList.remove("activo");
+    });
+  });
+
   // Cargar la vista por defecto (Dashboard)
   cargarVista("dashboard");
 
@@ -133,9 +140,9 @@ document.addEventListener("DOMContentLoaded", () => {
           {
             method: "POST",
             headers: {
-              "Content-Type": "application/json"
+              "Content-Type": "application/json",
             },
-            body: JSON.stringify({ forzar })
+            body: JSON.stringify({ forzar }),
           },
         );
         const datos = await respuesta.json();
@@ -180,7 +187,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const optionsRepararPc = document.getElementById("optionsRepararPc");
   const formReparar = document.getElementById("formRepararPaginas");
 
-  console.log("[DEBUG] Inicializando btnReparar:", btnReparar, "modalReparar:", modalReparar);
+  console.log(
+    "[DEBUG] Inicializando btnReparar:",
+    btnReparar,
+    "modalReparar:",
+    modalReparar,
+  );
 
   // Configura y pobla de manera interactiva el selector de PC del modal de reparación
   function configurarRepararPcDropdown(pcs, cargando = false) {
@@ -202,7 +214,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Asegurar que el texto del botón coincida con el valor seleccionado
-    const seleccionadaOpt = optionsRepararPc.querySelector(`.custom-select-option[data-valor="${valorActual}"]`);
+    const seleccionadaOpt = optionsRepararPc.querySelector(
+      `.custom-select-option[data-valor="${valorActual}"]`,
+    );
     if (seleccionadaOpt) {
       btnRepararPc.innerText = seleccionadaOpt.innerText;
     } else {
@@ -251,12 +265,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (btnReparar && modalReparar) {
     btnReparar.addEventListener("click", async () => {
-      console.log("[DEBUG-VER-3] Click detectado en btnReparar. Forzando display flex...");
-      
+      console.log(
+        "[DEBUG-VER-3] Click detectado en btnReparar. Forzando display flex...",
+      );
+
       // 1. Mostrar el modal inmediatamente de forma limpia y rapida
       modalReparar.style.display = "flex";
       modalReparar.classList.remove("minimizado");
-      
+
       // Forzar reflow en el motor de renderizado de Chromium (Electron) para evitar el lag de GPU
       modalReparar.offsetHeight;
 
@@ -265,7 +281,7 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("panelResultadosReparar").style.display = "none";
       formReparar.style.display = "block";
       document.getElementById("btnIniciarReparacion").disabled = false;
-      
+
       // 3. Colocar estado de carga temporal en el select
       configurarRepararPcDropdown([], true);
 
@@ -296,29 +312,38 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("panelResultadosReparar").style.display = "none";
       actualizarEstadoCabecera("modalRepararPaginas", "cargando");
 
-      const pcSeleccionada = btnRepararPc ? (btnRepararPc.getAttribute("data-valor") || "TODAS") : "TODAS";
+      const pcSeleccionada = btnRepararPc
+        ? btnRepararPc.getAttribute("data-valor") || "TODAS"
+        : "TODAS";
 
       try {
-        const respuesta = await fetch("http://localhost:3000/api/reparar-paginas", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pc: pcSeleccionada })
-        });
+        const respuesta = await fetch(
+          "http://localhost:3000/api/reparar-paginas",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pc: pcSeleccionada }),
+          },
+        );
         const datos = await respuesta.json();
 
         document.getElementById("panelProgresoReparar").style.display = "none";
-        
+
         if (datos.ok) {
           actualizarEstadoCabecera("modalRepararPaginas", "listo");
           if (datos.omitido) {
             alert("Sin registros pendientes.");
             formReparar.style.display = "block";
           } else {
-            document.getElementById("lblRepararIncompletos").textContent = datos.totalIncompletos;
-            document.getElementById("lblRepararExitosos").textContent = datos.totalReparados;
-            document.getElementById("lblRepararFallidos").textContent = datos.totalNoEncontrados;
-            document.getElementById("panelResultadosReparar").style.display = "block";
-            
+            document.getElementById("lblRepararIncompletos").textContent =
+              datos.totalIncompletos;
+            document.getElementById("lblRepararExitosos").textContent =
+              datos.totalReparados;
+            document.getElementById("lblRepararFallidos").textContent =
+              datos.totalNoEncontrados;
+            document.getElementById("panelResultadosReparar").style.display =
+              "block";
+
             if (vistaActual === "registros") {
               cargarTablaRegistros(); // Recargar registros si el usuario está en esta pantalla
             }
@@ -331,7 +356,9 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (error) {
         actualizarEstadoCabecera("modalRepararPaginas", "error");
         console.error("Error al reparar páginas:", error);
-        alert("❌ Error al comunicarse con el servidor local para realizar la reparación.");
+        alert(
+          "❌ Error al comunicarse con el servidor local para realizar la reparación.",
+        );
         document.getElementById("panelProgresoReparar").style.display = "none";
         formReparar.style.display = "block";
       } finally {
@@ -361,7 +388,7 @@ document.addEventListener("DOMContentLoaded", () => {
     btnMenuMigrar.addEventListener("click", () => {
       modalMigrar.style.display = "flex";
       modalMigrar.classList.remove("minimizado");
-      
+
       // Resetear interfaz
       document.getElementById("panelConfirmarMigrar").style.display = "block";
       document.getElementById("panelProgresoMigrar").style.display = "none";
@@ -378,19 +405,26 @@ document.addEventListener("DOMContentLoaded", () => {
       actualizarEstadoCabecera("modalMigrarHistorico", "cargando");
 
       try {
-        const respuesta = await fetch("http://localhost:3000/api/migrar-historico", {
-          method: "POST"
-        });
+        const respuesta = await fetch(
+          "http://localhost:3000/api/migrar-historico",
+          {
+            method: "POST",
+          },
+        );
         const datos = await respuesta.json();
 
         document.getElementById("panelProgresoMigrar").style.display = "none";
 
         if (datos.ok) {
           actualizarEstadoCabecera("modalMigrarHistorico", "listo");
-          document.getElementById("lblMigrarUsuarios").textContent = datos.usuariosMigrados;
-          document.getElementById("lblMigrarRegistros").textContent = datos.registrosMigrados;
-          document.getElementById("lblMigrarDuplicados").textContent = datos.duplicadosOmitidos;
-          document.getElementById("panelResultadosMigrar").style.display = "block";
+          document.getElementById("lblMigrarUsuarios").textContent =
+            datos.usuariosMigrados;
+          document.getElementById("lblMigrarRegistros").textContent =
+            datos.registrosMigrados;
+          document.getElementById("lblMigrarDuplicados").textContent =
+            datos.duplicadosOmitidos;
+          document.getElementById("panelResultadosMigrar").style.display =
+            "block";
 
           if (vistaActual === "registros") {
             cargarTablaRegistros();
@@ -398,12 +432,15 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
           actualizarEstadoCabecera("modalMigrarHistorico", "error");
           alert("⚠️ " + datos.mensaje);
-          document.getElementById("panelConfirmarMigrar").style.display = "block";
+          document.getElementById("panelConfirmarMigrar").style.display =
+            "block";
         }
       } catch (error) {
         actualizarEstadoCabecera("modalMigrarHistorico", "error");
         console.error("Error al migrar histórico:", error);
-        alert("❌ Error al comunicarse con el servidor local para realizar la migración.");
+        alert(
+          "❌ Error al comunicarse con el servidor local para realizar la migración.",
+        );
         document.getElementById("panelProgresoMigrar").style.display = "none";
         document.getElementById("panelConfirmarMigrar").style.display = "block";
       } finally {
@@ -416,13 +453,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Soporte global de Minimizar/Maximizar Modales
-  document.querySelectorAll(".btn-minimizar-modal").forEach(btn => {
+  document.querySelectorAll(".btn-minimizar-modal").forEach((btn) => {
     btn.addEventListener("click", () => {
       const overlay = btn.closest(".modal-superpuesto");
       if (!overlay) return;
 
       overlay.classList.toggle("minimizado");
-      
+
       // Forzar reflow tras alternar clase de minimizado
       overlay.offsetHeight;
 
@@ -431,7 +468,10 @@ document.addEventListener("DOMContentLoaded", () => {
       // Actualizar icono según el estado de minimizado
       const icono = btn.querySelector("iconify-icon");
       if (icono) {
-        icono.setAttribute("icon", esMinimizado ? "mdi:window-maximize" : "mdi:window-minimize");
+        icono.setAttribute(
+          "icon",
+          esMinimizado ? "mdi:window-maximize" : "mdi:window-minimize",
+        );
       }
     });
   });
@@ -538,7 +578,8 @@ window.actualizarColoresGraficasPorTema = function (esClaro) {
   }
 
   if (instanciaPastelImagenesTurno) {
-    instanciaPastelImagenesTurno.options.plugins.legend.labels.color = colorTexto;
+    instanciaPastelImagenesTurno.options.plugins.legend.labels.color =
+      colorTexto;
     instanciaPastelImagenesTurno.update();
   }
 };
@@ -1059,6 +1100,46 @@ function exportarRegistrosExcel() {
   if (inputInicio) inputInicio.value = formatoFecha(hace7Dias);
   if (inputFin) inputFin.value = formatoFecha(hoy);
 
+  // Inicializar dropdown interactivo premium de tipo de reporte
+  const wrapperTipo = document.getElementById("wrapperExcelTipoReporte");
+  const btnTipo = document.getElementById("btnExcelTipoReporte");
+  const optionsTipo = document.getElementById("optionsExcelTipoReporte");
+
+  if (btnTipo && wrapperTipo && optionsTipo) {
+    // Resetear valor visual por defecto
+    const seleccionadoOpt = optionsTipo.querySelector(".custom-select-option.seleccionado");
+    if (seleccionadoOpt) {
+      btnTipo.setAttribute("data-valor", seleccionadoOpt.getAttribute("data-valor") || "detallado");
+      btnTipo.innerText = seleccionadoOpt.innerText;
+    }
+
+    if (!btnTipo.dataset.listener) {
+      btnTipo.dataset.listener = "true";
+      btnTipo.addEventListener("click", (e) => {
+        e.stopPropagation();
+        document.querySelectorAll(".custom-select-wrapper").forEach((w) => {
+          if (w !== wrapperTipo) w.classList.remove("activo");
+        });
+        wrapperTipo.classList.toggle("activo");
+      });
+    }
+
+    optionsTipo.onclick = (e) => {
+      const opt = e.target.closest(".custom-select-option");
+      if (!opt) return;
+
+      const nuevoValor = opt.getAttribute("data-valor");
+      btnTipo.setAttribute("data-valor", nuevoValor);
+      btnTipo.innerText = opt.innerText;
+
+      optionsTipo
+        .querySelectorAll(".custom-select-option")
+        .forEach((o) => o.classList.remove("seleccionado"));
+      opt.classList.add("seleccionado");
+      wrapperTipo.classList.remove("activo");
+    };
+  }
+
   modal.style.display = "flex";
 
   // Vincular eventos de cierre
@@ -1068,6 +1149,7 @@ function exportarRegistrosExcel() {
 
   const cerrarModal = () => {
     modal.style.display = "none";
+    if (wrapperTipo) wrapperTipo.classList.remove("activo");
   };
 
   if (btnCerrar && !btnCerrar.dataset.listener) {
@@ -1088,16 +1170,16 @@ function exportarRegistrosExcel() {
       const fechaInicio = inputInicio.value;
       const fechaFin = inputFin.value;
 
+      const tipoReporte = btnTipo ? (btnTipo.getAttribute("data-valor") || "detallado") : "detallado";
+
       cerrarModal();
 
       try {
-        const url = `http://localhost:3000/api/estadisticas/exportar-excel?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`;
+        const url = `http://localhost:3000/api/estadisticas/exportar-excel?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}&tipo=${tipoReporte}`;
         const respuesta = await fetch(url);
         const datos = await respuesta.json();
 
-        if (datos.ok) {
-          alert("Reporte Excel generado y abierto de forma automática.");
-        } else {
+        if (!datos.ok) {
           alert("Error al generar Excel: " + datos.mensaje);
         }
       } catch (err) {
@@ -1300,6 +1382,14 @@ function renderizarPastelesPorTurno(datosTurnos) {
     });
   };
 
-  instanciaPastelPdfsTurno = getConfigPastel(ctxPdfs, "PDFs por Turno", dataPdfs);
-  instanciaPastelImagenesTurno = getConfigPastel(ctxImg, "Imágenes por Turno", dataImg);
+  instanciaPastelPdfsTurno = getConfigPastel(
+    ctxPdfs,
+    "PDFs por Turno",
+    dataPdfs,
+  );
+  instanciaPastelImagenesTurno = getConfigPastel(
+    ctxImg,
+    "Imágenes por Turno",
+    dataImg,
+  );
 }
