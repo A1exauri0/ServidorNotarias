@@ -4,11 +4,11 @@
  */
 
 const express = require("express");
-const enrutador = express.Router();
+const router = express.Router();
 const controladorUsuarios = require("../controllers/usuarios.controller");
 
 // Endpoint de login para la aplicacion cliente C#
-enrutador.post("/login", async (req, res) => {
+router.post("/login", async (req, res) => {
   try {
     const { nombre_usuario, pin } = req.body;
     if (!nombre_usuario || !pin) {
@@ -33,31 +33,27 @@ enrutador.post("/login", async (req, res) => {
 });
 
 // Obtener todos los usuarios (Vista admin)
-enrutador.get("/", async (req, res) => {
+router.get("/", async (req, res) => {
   try {
     const usuarios = await controladorUsuarios.obtenerTodosUsuarios();
     return res.json({ ok: true, usuarios });
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        ok: false,
-        mensaje: "Error al obtener usuarios: " + error.message,
-      });
+    return res.status(500).json({
+      ok: false,
+      mensaje: "Error al obtener usuarios: " + error.message,
+    });
   }
 });
 
 // Crear un nuevo usuario
-enrutador.post("/", async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     const { nombre_completo, nombre_usuario, pin, turno } = req.body;
     if (!nombre_completo || !nombre_usuario || !pin || pin.length !== 4) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          mensaje: "Faltan datos obligatorios o el PIN no es de 4 digitos.",
-        });
+      return res.status(400).json({
+        ok: false,
+        mensaje: "Faltan datos obligatorios o el PIN no es de 4 digitos.",
+      });
     }
 
     const nuevoId = await controladorUsuarios.crearUsuario(
@@ -84,17 +80,15 @@ enrutador.post("/", async (req, res) => {
 });
 
 // Actualizar un usuario existente
-enrutador.put("/:id", async (req, res) => {
+router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { nombre_completo, nombre_usuario, pin, turno } = req.body;
     if (!nombre_completo || !nombre_usuario || !pin || pin.length !== 4) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          mensaje: "Faltan datos obligatorios o el PIN no es de 4 digitos.",
-        });
+      return res.status(400).json({
+        ok: false,
+        mensaje: "Faltan datos obligatorios o el PIN no es de 4 digitos.",
+      });
     }
 
     await controladorUsuarios.actualizarUsuario(
@@ -110,40 +104,34 @@ enrutador.put("/:id", async (req, res) => {
     });
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          mensaje: "Ese nombre de usuario ya existe en otro registro.",
-        });
-    }
-    return res
-      .status(500)
-      .json({
+      return res.status(400).json({
         ok: false,
-        mensaje: "Error al actualizar usuario: " + error.message,
+        mensaje: "Ese nombre de usuario ya existe en otro registro.",
       });
+    }
+    return res.status(500).json({
+      ok: false,
+      mensaje: "Error al actualizar usuario: " + error.message,
+    });
   }
 });
 
 // Eliminar un usuario
-enrutador.delete("/:id", async (req, res) => {
+router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
     await controladorUsuarios.eliminarUsuario(id);
     return res.json({ ok: true, mensaje: "Usuario eliminado correctamente." });
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        ok: false,
-        mensaje: "Error al eliminar usuario: " + error.message,
-      });
+    return res.status(500).json({
+      ok: false,
+      mensaje: "Error al eliminar usuario: " + error.message,
+    });
   }
 });
 
 // Intercambio de turnos masivo
-enrutador.post("/intercambiar-turnos", async (req, res) => {
+router.post("/intercambiar-turnos", async (req, res) => {
   try {
     const actualizados = await controladorUsuarios.intercambiarTurnos();
     return res.json({
@@ -151,13 +139,11 @@ enrutador.post("/intercambiar-turnos", async (req, res) => {
       mensaje: `Se han intercambiado los turnos de ${actualizados} usuarios.`,
     });
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        ok: false,
-        mensaje: "Error al intercambiar turnos: " + error.message,
-      });
+    return res.status(500).json({
+      ok: false,
+      mensaje: "Error al intercambiar turnos: " + error.message,
+    });
   }
 });
 
-module.exports = enrutador;
+module.exports = router;

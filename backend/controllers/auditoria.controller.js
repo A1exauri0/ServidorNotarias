@@ -510,12 +510,18 @@ async function escanearDirectorio(req, res) {
   }
 }
 
-// Envía el PDF físico directamente consumiendo el endpoint de la API central de Astronmx / Stellum
+// Envía el PDF físico directamente consumiendo el endpoint de la API central de Astronmx / Stellum sin saturar la memoria RAM
 async function enviarPdfAEndpointAstronmx(rutaCompleta, archivo, tipoCaptura, notariaConVolumen) {
   const urlEndpoint = process.env.URL_ASTRONMX_SUBIR || "https://app.astronmx.cloud/api/digitalizacion/subir-pdf";
 
-  const buffer = await fs.promises.readFile(rutaCompleta);
-  const blob = new Blob([buffer], { type: "application/pdf" });
+  let blob;
+  if (typeof fs.openAsBlob === "function") {
+    blob = await fs.openAsBlob(rutaCompleta, { type: "application/pdf" });
+  } else {
+    const buffer = await fs.promises.readFile(rutaCompleta);
+    blob = new Blob([buffer], { type: "application/pdf" });
+  }
+
   const formData = new FormData();
   formData.append("archivo", blob, archivo);
   formData.append("tipo_captura", tipoCaptura || "NOTARIAS");
@@ -559,8 +565,10 @@ async function importarArchivoPdf(req, res) {
         ? `${notaria}\\${volumen}`
         : notaria;
 
-    // 1. Enviar siempre el PDF consumiendo la API oficial de Astronmx / Stellum
+    // 1. Intentar enviar el PDF consumiendo la API oficial de Astronmx / Stellum
     let respuestaAstronmx = null;
+    let errorAstronmxDetalle = null;
+
     try {
       respuestaAstronmx = await enviarPdfAEndpointAstronmx(
         rutaCompleta,
@@ -569,7 +577,29 @@ async function importarArchivoPdf(req, res) {
         notariaConVolumen
       );
     } catch (errAstronmx) {
+      errorAstronmxDetalle = errAstronmx.message;
       console.warn("Aviso al enviar a Astronmx:", errAstronmx.message);
+    }
+
+    let viaTransferencia = "endpoint_astronmx";
+
+    // Fallback para archivos pesados o de red lenta: si el HTTP falló pero tenemos acceso a la red UNC
+    if (!respuestaAstronmx || !respuestaAstronmx.ok) {
+      const baseDestino = process.env.RUTA_SSDIREC || "\\\\172.40.5.84\\ssdirec";
+      const subcarpeta =
+        volumen && volumen !== "SIN VOLUMEN"
+          ? path.join(tipoCaptura, notaria, volumen)
+          : path.join(tipoCaptura, notaria);
+      const carpetaDestinoFinal = path.join(baseDestino, subcarpeta);
+      const rutaDestinoArchivo = path.join(carpetaDestinoFinal, archivo);
+
+      if (!fs.existsSync(carpetaDestinoFinal)) {
+        await fs.promises.mkdir(carpetaDestinoFinal, { recursive: true });
+      }
+      if (rutaCompleta !== rutaDestinoArchivo) {
+        await fs.promises.copyFile(rutaCompleta, rutaDestinoArchivo);
+      }
+      viaTransferencia = "copia_red_unc";
     }
 
     const paginasFisicas = respuestaAstronmx && respuestaAstronmx.paginas_detectadas
@@ -607,7 +637,7 @@ async function importarArchivoPdf(req, res) {
         notaria,
         volumen === "SIN VOLUMEN" ? null : volumen,
         archivo,
-        "Importado vía endpoint Astronmx digitalizacion/subir-pdf",
+        `Importado vía ${viaTransferencia}`,
         paginasFisicas,
         ahora,
         "IREC",
@@ -617,10 +647,12 @@ async function importarArchivoPdf(req, res) {
       await dbPool.query(sqlInsert, paramsInsert);
     }
 
-    // 3. Cortar (eliminar) el archivo físico del disco local tras confirmarse el envío exitoso a Astronmx
-    if (respuestaAstronmx && respuestaAstronmx.ok && fs.existsSync(rutaCompleta)) {
+    // 3. Cortar (eliminar) el archivo físico del disco local tras confirmarse la transferencia exitosa
+    let cortado = false;
+    if (fs.existsSync(rutaCompleta)) {
       try {
         await fs.promises.unlink(rutaCompleta);
+        cortado = true;
       } catch (errUnlink) {
         console.warn("Aviso al eliminar el archivo físico local tras transferir:", errUnlink.message);
       }
@@ -628,15 +660,18 @@ async function importarArchivoPdf(req, res) {
 
     res.json({
       ok: true,
-      mensaje: `El archivo ${archivo} fue transferido y procesado con éxito en Astronmx.`,
+      mensaje: `El archivo ${archivo} fue transferido con éxito (${viaTransferencia}).`,
       paginas: paginasFisicas,
       paginas_detectadas: paginasFisicas,
+      cortado,
+      via: viaTransferencia,
+      errorAstronmxDetalle,
       respuestaAstronmx,
     });
   } catch (error) {
     res.status(500).json({
       ok: false,
-      mensaje: `Error al importar archivo vía endpoint: ${error.message}`,
+      mensaje: `Error al transferir archivo: ${error.message}`,
     });
   }
 }
@@ -1289,6 +1324,190 @@ async function obtenerPdfsLoteDirecto(req, res) {
   }
 }
 
+// Estado persistente en memoria del servidor Node.js
+const estadoTransferenciaSegundoPlano = {
+  activo: false,
+  total: 0,
+  procesados: 0,
+  exitosos: 0,
+  errores: 0,
+  pct: 0,
+  archivoActual: "",
+  mensajeTexto: "Sin transferencias activas.",
+  iniciadoEn: null,
+};
+
+// Iniciar proceso masivo en segundo plano
+async function iniciarTransferenciaSegundoPlano(req, res) {
+  try {
+    const { notariasMarcadas, volumenesMarcados, listaDirecta } = req.body;
+
+    if (estadoTransferenciaSegundoPlano.activo) {
+      return res.json({
+        ok: true,
+        mensaje: "Ya hay una transferencia ejecutándose en segundo plano.",
+        estado: estadoTransferenciaSegundoPlano,
+      });
+    }
+
+    let archivosAProcesar = [];
+
+    if (listaDirecta && Array.isArray(listaDirecta) && listaDirecta.length > 0) {
+      archivosAProcesar = listaDirecta;
+    } else {
+      const listaResultados = [];
+      const baseFinal = "C:\\NOTARIAS";
+
+      if (volumenesMarcados && Array.isArray(volumenesMarcados) && volumenesMarcados.length > 0) {
+        for (const itemVol of volumenesMarcados) {
+          const rBase = itemVol.rutaBase || baseFinal;
+          let dirVolumen = path.join(rBase, itemVol.notaria, itemVol.volumen);
+          if (!fs.existsSync(dirVolumen)) {
+            dirVolumen = path.join(rBase, "NOTARIAS", itemVol.notaria, itemVol.volumen);
+          }
+          if (fs.existsSync(dirVolumen)) {
+            const pdfs = [];
+            obtenerPdfsRecursivo(dirVolumen, pdfs);
+            pdfs.forEach((rutaCompleta) => {
+              listaResultados.push({
+                rutaCompleta,
+                archivo: path.basename(rutaCompleta),
+                notaria: itemVol.notaria,
+                volumen: itemVol.volumen,
+              });
+            });
+          }
+        }
+      } else if (notariasMarcadas && Array.isArray(notariasMarcadas) && notariasMarcadas.length > 0) {
+        for (const itemNot of notariasMarcadas) {
+          const rBase = itemNot.rutaBase || baseFinal;
+          let dirNotaria = path.join(rBase, itemNot.notaria);
+          if (!fs.existsSync(dirNotaria)) {
+            dirNotaria = path.join(rBase, "NOTARIAS", itemNot.notaria);
+          }
+          if (fs.existsSync(dirNotaria)) {
+            const pdfs = [];
+            obtenerPdfsRecursivo(dirNotaria, pdfs);
+            pdfs.forEach((rutaCompleta) => {
+              const { notaria, volumen } = extraerNotariaYVolumenDeRuta(rutaCompleta);
+              listaResultados.push({
+                rutaCompleta,
+                archivo: path.basename(rutaCompleta),
+                notaria: notaria !== "General" ? notaria : itemNot.notaria,
+                volumen,
+              });
+            });
+          }
+        }
+      }
+      archivosAProcesar = listaResultados;
+    }
+
+    if (archivosAProcesar.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        mensaje: "No se encontraron archivos PDF para transferir en la selección.",
+      });
+    }
+
+    // Inicializar estado
+    estadoTransferenciaSegundoPlano.activo = true;
+    estadoTransferenciaSegundoPlano.total = archivosAProcesar.length;
+    estadoTransferenciaSegundoPlano.procesados = 0;
+    estadoTransferenciaSegundoPlano.exitosos = 0;
+    estadoTransferenciaSegundoPlano.errores = 0;
+    estadoTransferenciaSegundoPlano.pct = 5;
+    estadoTransferenciaSegundoPlano.mensajeTexto = `Iniciando transferencia de ${archivosAProcesar.length} archivo(s)...`;
+    estadoTransferenciaSegundoPlano.iniciadoEn = new Date();
+
+    // Arrancar la cola concurrente en segundo plano (3 transferencias simultáneas en paralelo sin colapso de RAM)
+    setImmediate(async () => {
+      const LIMITE_CONCURRENCIA = 3;
+      let indiceSiguiente = 0;
+
+      const ejecutarWorker = async () => {
+        while (indiceSiguiente < archivosAProcesar.length) {
+          const i = indiceSiguiente++;
+          const item = archivosAProcesar[i];
+          const rutaLegible = item.volumen && item.volumen !== "SIN VOLUMEN"
+            ? `${item.notaria} \\ ${item.volumen} \\ ${item.archivo}`
+            : `${item.notaria} \\ ${item.archivo}`;
+
+          try {
+            const reqSim = {
+              body: {
+                rutaCompleta: item.rutaCompleta,
+                archivo: item.archivo,
+                notaria: item.notaria,
+                volumen: item.volumen,
+                usuario: "Administrador",
+                turno: "Matutino",
+                pc: "SERVIDOR-CENTRAL",
+              },
+            };
+
+            let exitoLocal = false;
+            const resSim = {
+              status: () => resSim,
+              json: (data) => {
+                if (data && data.ok) exitoLocal = true;
+                return data;
+              },
+            };
+
+            await importarArchivoPdf(reqSim, resSim);
+
+            if (exitoLocal) {
+              estadoTransferenciaSegundoPlano.exitosos++;
+            } else {
+              estadoTransferenciaSegundoPlano.errores++;
+            }
+          } catch (errTask) {
+            estadoTransferenciaSegundoPlano.errores++;
+            console.error("Error en tarea segundo plano:", errTask.message);
+          }
+
+          estadoTransferenciaSegundoPlano.procesados++;
+          const pctExacto = Math.round((estadoTransferenciaSegundoPlano.procesados / archivosAProcesar.length) * 100);
+          estadoTransferenciaSegundoPlano.archivoActual = rutaLegible;
+          estadoTransferenciaSegundoPlano.mensajeTexto = `[${estadoTransferenciaSegundoPlano.procesados}/${archivosAProcesar.length}] Transfiriendo en segundo plano: ${rutaLegible}`;
+          estadoTransferenciaSegundoPlano.pct = Math.min(100, Math.max(1, pctExacto));
+
+          // Pausa mínima para permitir recolección de basura de V8
+          await new Promise((r) => setTimeout(r, 15));
+        }
+      };
+
+      // Iniciar los trabajadores concurrentes simultáneos
+      const numWorkers = Math.min(LIMITE_CONCURRENCIA, archivosAProcesar.length);
+      const workers = [];
+      for (let w = 0; w < numWorkers; w++) {
+        workers.push(ejecutarWorker());
+      }
+
+      await Promise.all(workers);
+
+      // Finalizar estado tras completar todos los trabajadores
+      estadoTransferenciaSegundoPlano.activo = false;
+      estadoTransferenciaSegundoPlano.pct = 100;
+      estadoTransferenciaSegundoPlano.mensajeTexto = `Finalizado: ${estadoTransferenciaSegundoPlano.exitosos} exitosos, ${estadoTransferenciaSegundoPlano.errores} errores.`;
+    });
+
+    res.json({
+      ok: true,
+      mensaje: `Transferencia en segundo plano iniciada para ${archivosAProcesar.length} archivos.`,
+      estado: estadoTransferenciaSegundoPlano,
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, mensaje: "Error al iniciar segundo plano: " + error.message });
+  }
+}
+
+// Consultar estado actual del proceso en segundo plano
+function obtenerEstadoTransferenciaSegundoPlano(req, res) {
+  res.json({ ok: true, estado: estadoTransferenciaSegundoPlano });
+}
+
 module.exports = {
   inicializarPool,
   registrarAuditoria,
@@ -1306,4 +1525,6 @@ module.exports = {
   asignarPdfs,
   obtenerPdfsParaAsignar,
   obtenerPdfsLoteDirecto,
+  iniciarTransferenciaSegundoPlano,
+  obtenerEstadoTransferenciaSegundoPlano,
 };

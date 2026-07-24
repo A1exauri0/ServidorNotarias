@@ -398,114 +398,80 @@ async function ejecutarTransferenciaMasiva() {
     }
   }
 
-  if (listaArchivosTransferir.length === 0) {
-    if (lblTexto) {
-      lblTexto.textContent = "No se encontraron archivos PDF para transferir en la selección.";
-      lblTexto.style.color = "#eb5584";
+  // --- Paso 2: Iniciar la transferencia masiva persistente en segundo plano ---
+  try {
+    const resInicio = await fetch("http://localhost:3000/api/iniciar-transferencia-lote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        listaDirecta: listaArchivosTransferir.length > 0 ? listaArchivosTransferir : null,
+      }),
+    });
+
+    const datInicio = await resInicio.json();
+    if (!datInicio.ok) {
+      alert(datInicio.mensaje || "No se pudo iniciar la transferencia en segundo plano.");
+      if (btnTransferir) btnTransferir.disabled = false;
+      return;
     }
-    if (barra) barra.style.width = "100%";
-    if (lblPct) lblPct.textContent = "100%";
+
+    iniciarSondeoSegundoPlano();
+  } catch (errTask) {
+    alert("Error al iniciar la tarea en segundo plano: " + errTask.message);
     if (btnTransferir) btnTransferir.disabled = false;
-    return;
   }
-
-  // --- Paso 2: Enviar los archivos directamente al endpoint de Astronmx / Stellum ---
-  let procesadosOk = 0;
-  let errores = 0;
-  const total = listaArchivosTransferir.length;
-
-  for (let i = 0; i < total; i++) {
-    const datosArchivo = listaArchivosTransferir[i];
-    const rutaLegible = datosArchivo.volumen && datosArchivo.volumen !== "SIN VOLUMEN"
-      ? `${datosArchivo.notaria} \\ ${datosArchivo.volumen} \\ ${datosArchivo.archivo}`
-      : `${datosArchivo.notaria} \\ ${datosArchivo.archivo}`;
-
-    // Calcular el porcentaje exacto de avance sin regresiones (escala 5% a 98%)
-    const pctAvance = Math.min(98, Math.round(5 + (i / total) * 93));
-
-    if (lblTexto)
-      lblTexto.textContent = `[${i + 1}/${total}] Transfiriendo a Astronmx: ${rutaLegible}`;
-    if (barra) barra.style.width = `${pctAvance}%`;
-    if (lblPct) lblPct.textContent = `${pctAvance}%`;
-
-    // Micro-pausa asíncrona para permitir al navegador redibujar la barra de progreso en vivo
-    await new Promise((r) => setTimeout(r, 10));
-
-    const wrapperNodo = datosArchivo.domId ? document.getElementById(`wrapper_${datosArchivo.domId}`) : null;
-    const labelEstado = wrapperNodo ? wrapperNodo.querySelector(".etiqueta-estado-archivo") : null;
-
-    if (labelEstado) {
-      labelEstado.innerHTML = `<iconify-icon icon="line-md:loading-twotone-loop" style="vertical-align: middle; margin-right: 4px;"></iconify-icon>Enviando...`;
-      labelEstado.style.color = "#3a6ac9";
-    }
-
-    try {
-      const respuesta = await fetch(
-        "http://localhost:3000/api/importar-archivo",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            rutaCompleta: datosArchivo.rutaCompleta,
-            archivo: datosArchivo.archivo,
-            notaria: datosArchivo.notaria,
-            volumen: datosArchivo.volumen,
-            usuario: "Administrador",
-            turno: "Matutino",
-            pc: "SERVIDOR-CENTRAL",
-          }),
-        },
-      );
-
-      const datos = await respuesta.json();
-
-      if (datos.ok) {
-        procesadosOk++;
-
-        if (wrapperNodo) {
-          wrapperNodo.className = "nodo-archivo-pdf completo";
-          const chkBox = wrapperNodo.querySelector(".chk-archivo-pdf");
-          if (chkBox) {
-            chkBox.checked = false;
-            chkBox.disabled = true;
-            chkBox.style.cursor = "not-allowed";
-          }
-        }
-        if (labelEstado) {
-          labelEstado.textContent = `✔ Registrado (${datos.paginas} pág.)`;
-          labelEstado.style.color = "";
-        }
-      } else {
-        errores++;
-        if (labelEstado) {
-          labelEstado.textContent = "❌ Falló transferencia";
-          labelEstado.style.color = "#ea5455";
-        }
-      }
-    } catch (err) {
-      errores++;
-      if (labelEstado) {
-        labelEstado.textContent = "❌ Error de conexión";
-        labelEstado.style.color = "#ea5455";
-      }
-      console.error("Error en fetch transferencia:", err);
-    }
-
-    // Actualizar al porcentaje de finalización de este archivo
-    const pctFinArchivo = Math.min(99, Math.round(5 + ((i + 1) / total) * 93));
-    if (barra) barra.style.width = `${pctFinArchivo}%`;
-    if (lblPct) lblPct.textContent = `${pctFinArchivo}%`;
-  }
-
-  // Finalizar barra de progreso al 100%
-  if (barra) barra.style.width = "100%";
-  if (lblPct) lblPct.textContent = "100%";
-  if (lblTexto) {
-    lblTexto.textContent = `Transferencia finalizada: ${procesadosOk} exitosos, ${errores} fallidos.`;
-    lblTexto.style.color = errores > 0 ? "#eb5584" : "#2ebd75";
-  }
-
-  if (btnTransferir) btnTransferir.disabled = false;
 }
+
+// Sondeo periódico del estado en segundo plano
+let timerSondeo = null;
+
+function iniciarSondeoSegundoPlano() {
+  if (timerSondeo) clearInterval(timerSondeo);
+
+  timerSondeo = setInterval(async () => {
+    try {
+      const res = await fetch("http://localhost:3000/api/estado-transferencia-lote");
+      const data = await res.json();
+      if (data.ok && data.estado) {
+        const est = data.estado;
+        const barraContenedor = document.getElementById("barraProgresoImportar");
+        const barra = document.getElementById("barraProgreso");
+        const lblTexto = document.getElementById("lblProgresoTexto");
+        const lblPct = document.getElementById("lblPorcentaje");
+        const btnTransferir = document.getElementById("btnTransferirTodo");
+
+        if (est.activo) {
+          if (barraContenedor) barraContenedor.style.display = "block";
+          if (barra) barra.style.width = `${est.pct}%`;
+          if (lblPct) lblPct.textContent = `${est.pct}%`;
+          if (lblTexto) lblTexto.textContent = est.mensajeTexto;
+          if (btnTransferir) btnTransferir.disabled = true;
+        } else {
+          if (est.total > 0) {
+            if (barraContenedor) barraContenedor.style.display = "block";
+            if (barra) barra.style.width = "100%";
+            if (lblPct) lblPct.textContent = "100%";
+            if (lblTexto) {
+              lblTexto.textContent = `Transferencia finalizada: ${est.exitosos} exitosos, ${est.errores} fallidos.`;
+              lblTexto.style.color = est.errores > 0 ? "#eb5584" : "#2ebd75";
+            }
+          }
+          if (btnTransferir) btnTransferir.disabled = false;
+          clearInterval(timerSondeo);
+          timerSondeo = null;
+        }
+      }
+    } catch (e) {
+      console.warn("Error en sondeo de segundo plano:", e);
+    }
+  }, 1000);
+}
+
+// Al inicializar la vista, verificar si hay un proceso en segundo plano activo
+const originalInicializar = inicializarVistaImportar;
+window.inicializarVistaImportar = async function() {
+  await originalInicializar();
+  iniciarSondeoSegundoPlano();
+};
 
 window.inicializarVistaImportar = inicializarVistaImportar;

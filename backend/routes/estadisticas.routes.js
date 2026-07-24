@@ -3,17 +3,23 @@
  * Expone las APIs para gráficas y para el reporte de productividad estilo Excel.
  */
 
-const express = require('express');
-const enrutador = express.Router();
-const controladorEstadisticas = require('../controllers/estadisticas.controller');
+const express = require("express");
+const router = express.Router();
+const controladorEstadisticas = require("../controllers/estadisticas.controller");
 
 // Obtener productividad general por notarias y volumenes (Dashboard)
-enrutador.get('/productividad', controladorEstadisticas.obtenerProductividadGeneral);
+router.get(
+  "/productividad",
+  controladorEstadisticas.obtenerProductividadGeneral,
+);
 
 // Obtener productividad diaria por capturista y dia (Nueva vista Excel)
-enrutador.get('/productividad/diaria', controladorEstadisticas.obtenerProductividadDiaria);
+router.get(
+  "/productividad/diaria",
+  controladorEstadisticas.obtenerProductividadDiaria,
+);
 
 // Exportar reporte de auditoría premium en Excel y abrirlo automáticamente
-enrutador.get('/exportar-excel', controladorEstadisticas.exportarExcelAuditoria);
+router.get("/exportar-excel", controladorEstadisticas.exportarExcelAuditoria);
 
-module.exports = enrutador;
+module.exports = router;
