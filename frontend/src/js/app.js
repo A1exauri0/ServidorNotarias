@@ -81,6 +81,8 @@ document.addEventListener("DOMContentLoaded", () => {
         inicializarVistaProductividad();
       } else if (vistaActual === "importar") {
         inicializarVistaImportar();
+      } else if (vistaActual === "asignacion") {
+        inicializarVistaAsignacion();
       }
     });
   }
@@ -534,6 +536,13 @@ async function cargarVista(nombreVista) {
           "Importar y registrar PDFs desde carpetas locales o de red";
       if (elFiltrosFecha) elFiltrosFecha.style.display = "none";
       inicializarVistaImportar();
+    } else if (nombreVista === "asignacion") {
+      if (elTitulo) elTitulo.innerText = "Asignación de PDFs a Usuarios";
+      if (elSubtitulo)
+        elSubtitulo.innerText =
+          "Asigna masivamente documentos digitalizados a los capturistas";
+      if (elFiltrosFecha) elFiltrosFecha.style.display = "none";
+      inicializarVistaAsignacion();
     }
   } catch (error) {
     console.error(`Error al cargar la vista modular ${nombreVista}:`, error);

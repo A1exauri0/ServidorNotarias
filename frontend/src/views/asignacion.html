@@ -1,0 +1,150 @@
+<!-- Vista de Asignación de PDFs a Usuarios (asignacion.html) -->
+<div id="vista-asignacion-wrapper">
+
+    <!-- Header y Acción Masiva -->
+    <div class="tabla-contenedor" style="margin-bottom: 20px;">
+        <div class="tabla-cabecera" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+            <div>
+                <h3>Asignación de PDFs y Volúmenes a Capturistas</h3>
+                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--color-texto-secundario);">
+                    Selecciona notarías, volúmenes o documentos individuales del árbol explorador y asígnalos a los usuarios capturistas.
+                </p>
+            </div>
+
+            <!-- Selector de Usuario Destino y Botón Asignar -->
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <span style="font-size: 13px; font-weight: 600; color: var(--color-texto);">Asignar a Capturista:</span>
+                
+                <!-- Dropdown Custom Usuario Destino -->
+                <div class="custom-select-wrapper" id="wrapperUsuarioDestino" style="min-width: 240px;">
+                    <button class="custom-select-btn" id="btnUsuarioDestino" data-valor="">-- Seleccionar Capturista --</button>
+                    <div class="custom-select-options" id="optionsUsuarioDestino">
+                        <div class="custom-select-option seleccionado" data-valor="">-- Seleccionar Capturista --</div>
+                    </div>
+                </div>
+
+                <button id="btnEjecutarAsignacion" class="btn-filtrar" style="background-color: #2ebd75; border-color: #2ebd75; color: white; height: 38px; font-weight: 600;">
+                    <iconify-icon icon="mdi:account-check" style="vertical-align: middle; margin-right: 4px;"></iconify-icon>Asignar Seleccionados
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Layout Dividido: Árbol Explorador de Volúmenes (Izquierda) + Tabla de Detalle (Derecha) -->
+    <div style="display: grid; grid-template-columns: 340px 1fr; gap: 20px; align-items: start;">
+
+        <!-- Panel Izquierdo: Explorador de Árbol de Notarías y Volúmenes -->
+        <div class="tarjeta-panel" style="padding: 18px; border-radius: 14px; border: 1px solid var(--color-tarjeta-borde); background-color: var(--color-tarjeta-bg);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h4 style="margin: 0; font-size: 13px; color: var(--color-texto-secundario); text-transform: uppercase; letter-spacing: 0.8px; display: flex; align-items: center; gap: 6px;">
+                    <iconify-icon icon="mdi:folder-tree" style="font-size: 18px; color: #3a6ac9;"></iconify-icon>
+                    <span>Carpetas y Volúmenes</span>
+                </h4>
+            </div>
+
+            <!-- Estilos del Árbol de Asignación -->
+            <style>
+                .arbol-asignacion-premium {
+                    max-height: 520px;
+                    overflow-y: auto;
+                    border: 1px solid var(--color-tarjeta-borde);
+                    border-radius: 10px;
+                    padding: 10px;
+                    background-color: var(--color-tarjeta);
+                    font-size: 13px;
+                }
+                .nodo-notaria-asig {
+                    margin-bottom: 6px;
+                }
+                .cabecera-notaria-asig {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 6px 8px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    transition: background-color 0.2s;
+                }
+                .cabecera-notaria-asig:hover {
+                    background-color: rgba(58, 106, 201, 0.08);
+                }
+                .lista-volumenes-asig {
+                    margin-left: 20px;
+                    padding-left: 8px;
+                    border-left: 1px dashed var(--color-tarjeta-borde);
+                    display: none;
+                }
+                .nodo-volumen-asig {
+                    margin: 3px 0;
+                }
+                .cabecera-volumen-asig {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 4px 8px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    transition: background-color 0.2s;
+                }
+                .cabecera-volumen-asig:hover {
+                    background-color: rgba(58, 106, 201, 0.08);
+                }
+                .cabecera-volumen-asig.seleccionado {
+                    background-color: rgba(58, 106, 201, 0.15);
+                }
+            </style>
+
+            <div id="exploradorArbolAsignacion" class="arbol-asignacion-premium">
+                <div style="text-align: center; color: var(--color-texto-secundario); padding: 30px;">
+                    <iconify-icon icon="line-md:loading-twotone-loop" style="font-size: 28px; color: #3a6ac9; margin-bottom: 6px;"></iconify-icon>
+                    <p style="margin: 0; font-size: 13px;">Cargando notarías y volúmenes...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel Derecho: Registros y Selección de PDFs en Detalle -->
+        <div class="tabla-contenedor">
+            <!-- Barra de Filtros Rápidos -->
+            <div class="tabla-cabecera" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <h3 id="lblTotalRegistrosAsignar">Documentos Digitalizados</h3>
+                    <span id="badgeSeleccionados" class="etiqueta-estado-archivo" style="background-color: rgba(58, 106, 201, 0.15); color: #3a6ac9; padding: 4px 10px; font-size: 12px; font-weight: 600; border-radius: 12px;">0 seleccionados</span>
+                </div>
+
+                <div class="filtros-tabla-caja" style="display: flex; align-items: center; gap: 8px;">
+                    <!-- Dropdown Custom Usuario Filtro -->
+                    <div class="custom-select-wrapper" id="wrapperAsignacionUsuarioFiltro" style="min-width: 190px;">
+                        <button class="custom-select-btn" id="btnAsignacionUsuarioFiltro" data-valor="SIN_ASIGNAR">Sin Asignar / General</button>
+                        <div class="custom-select-options" id="optionsAsignacionUsuarioFiltro">
+                            <div class="custom-select-option" data-valor="">Todos los Usuarios</div>
+                            <div class="custom-select-option seleccionado" data-valor="SIN_ASIGNAR">Sin Asignar / General</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tabla-scroll">
+                <table class="tabla-plana">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px; text-align: center;">
+                                <input type="checkbox" id="chkSeleccionarTodosAsignacion" style="cursor: pointer;">
+                            </th>
+                            <th style="width: 70px; text-align: center;">ID</th>
+                            <th>Archivo PDF</th>
+                            <th>Notaría</th>
+                            <th>Volumen</th>
+                            <th style="width: 80px; text-align: center;">Páginas</th>
+                            <th>Usuario Actual</th>
+                            <th style="width: 140px; text-align: center;">Fecha/Hora</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaAsignacionBody">
+                        <!-- Carga dinámica -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>

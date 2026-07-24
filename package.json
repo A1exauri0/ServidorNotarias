@@ -1,6 +1,6 @@
 {
   "name": "servidor-notarias",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Servidor local y panel de administración en Electron y Express para auditorías de capturas",
   "main": "main.js",
   "scripts": {

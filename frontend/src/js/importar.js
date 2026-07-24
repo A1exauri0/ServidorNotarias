@@ -62,7 +62,7 @@ async function cargarArbolDirectorios() {
 
         cabecera.innerHTML = `
           ${iconoFlecha}
-          <input type="checkbox" class="chk-notaria" data-notaria-id="${notariaIdSeguro}" style="cursor: pointer; margin-right: 6px;">
+          <input type="checkbox" class="chk-notaria" data-notaria-id="${notariaIdSeguro}" data-nombre-notaria="${notaria.nombre}" data-ruta-base="${notaria.rutaBase || 'C:\\NOTARIAS'}" style="cursor: pointer; margin-right: 6px;">
           <iconify-icon icon="mdi:folder" style="color: #4a90e2; font-size: 18px; vertical-align: middle; margin-right: 4px;"></iconify-icon>
           <span style="font-weight: 600; color: var(--color-texto);">${notaria.nombre}</span>
         `;
@@ -86,7 +86,7 @@ async function cargarArbolDirectorios() {
             cabeceraVol.className = "cabecera-volumen";
             cabeceraVol.innerHTML = `
               <iconify-icon icon="mdi:chevron-right" class="flecha-toggle flecha-volumen-${volumenIdSeguro}" style="font-size: 15px; margin-right: 4px; vertical-align: middle;"></iconify-icon>
-              <input type="checkbox" class="chk-volumen" data-notaria-id="${notariaIdSeguro}" data-volumen-id="${volumenIdSeguro}" style="cursor: pointer; margin-right: 6px;">
+              <input type="checkbox" class="chk-volumen" data-notaria-id="${notariaIdSeguro}" data-nombre-notaria="${notaria.nombre}" data-nombre-volumen="${vol}" data-ruta-base="${notaria.rutaBase || 'C:\\NOTARIAS'}" style="cursor: pointer; margin-right: 6px;">
               <iconify-icon icon="mdi:folder-outline" style="color: #f5a623; font-size: 16px; vertical-align: middle; margin-right: 4px;"></iconify-icon>
               <span style="color: var(--color-texto-secundario); font-weight: 500;">${vol}</span>
             `;
@@ -256,19 +256,19 @@ async function cargarArchivosDeVolumen(
 
         if (noRegistrado) {
           claseEstado = "no-registrado";
-          textoEstado = "❌ Sin registro en BD";
-          chkHabilitado = false;
-          chkChecked = false; // No se manda
+          textoEstado = "📁 Nuevo (Sin registro)";
+          chkHabilitado = true;
+          chkChecked = true;
         } else if (omitidoCompleto) {
           claseEstado = "completo";
           textoEstado = `✔ Registrado (${item.paginasRegistradas} pág.)`;
           chkHabilitado = true;
-          chkChecked = true; // Sí se manda por defecto
+          chkChecked = true;
         } else if (requiereCorreccion) {
           claseEstado = "incompleto";
           textoEstado = `⚠️ Incompleto (${item.paginasRegistradas} pág.)`;
-          chkHabilitado = false;
-          chkChecked = false; // No se manda
+          chkHabilitado = true;
+          chkChecked = true;
         }
 
         if (esPesado) {
@@ -346,77 +346,61 @@ async function ejecutarTransferenciaMasiva() {
   if (barraContenedor) barraContenedor.style.display = "block";
   if (lblEstado) lblEstado.textContent = "";
 
-  // --- Paso 1: Cargar automáticamente los volúmenes que aún no se han escaneado ---
-  const notariasMarcadas = document.querySelectorAll(".chk-notaria:checked");
-  const volumenesMarcados = document.querySelectorAll(".chk-volumen:checked");
-
-  // Recopilar los contenedores de archivos que necesitan cargarse
-  const contenedoresPendientes = [];
-
-  // Desde notarías marcadas: buscar todos sus volúmenes
-  notariasMarcadas.forEach((chkNot) => {
-    const notariaId = chkNot.dataset.notariaId;
-    const nodoNotaria = document.getElementById(`nodo_notaria_${notariaId}`);
-    if (!nodoNotaria) return;
-    const listasArchivos = nodoNotaria.querySelectorAll(".lista-archivos-pdf");
-    listasArchivos.forEach((lista) => {
-      if (lista.dataset.cargado === "false") {
-        contenedoresPendientes.push(lista);
-      }
-    });
-  });
-
-  // Desde volúmenes marcados individualmente
-  volumenesMarcados.forEach((chkVol) => {
-    const volumenId = chkVol.dataset.volumenId;
-    const lista = document.getElementById(`lista_archivos_${volumenId}`);
-    if (lista && lista.dataset.cargado === "false") {
-      // Evitar duplicados
-      if (!contenedoresPendientes.includes(lista)) {
-        contenedoresPendientes.push(lista);
-      }
-    }
-  });
-
-  // Si no hay ninguna notaría ni volumen seleccionado
-  if (notariasMarcadas.length === 0 && volumenesMarcados.length === 0) {
-    alert("Selecciona al menos una notaría o volumen para transferir.");
-    if (btnTransferir) btnTransferir.disabled = false;
-    if (barraContenedor) barraContenedor.style.display = "none";
-    return;
-  }
-
-  // Escanear los volúmenes pendientes antes de transferir
-  if (contenedoresPendientes.length > 0) {
-    if (lblTexto) lblTexto.textContent = `Escaneando ${contenedoresPendientes.length} volumen(es) pendientes...`;
-    if (barra) barra.style.width = "0%";
-
-    for (let i = 0; i < contenedoresPendientes.length; i++) {
-      const lista = contenedoresPendientes[i];
-      const volumenId = lista.id.replace("lista_archivos_", "");
-      const pctEscaneo = Math.round(((i + 1) / contenedoresPendientes.length) * 50);
-      if (barra) barra.style.width = `${pctEscaneo}%`;
-      if (lblPct) lblPct.textContent = `${pctEscaneo}%`;
-      if (lblTexto) lblTexto.textContent = `Escaneando volumen ${i + 1} de ${contenedoresPendientes.length}...`;
-
-      await cargarArchivosDeVolumen(
-        lista.dataset.rutaEscaneo,
-        lista,
-        volumenId,
-      );
-      // Hacer visible el contenedor para que los checkboxes estén accesibles
-      lista.style.display = "block";
-    }
-  }
-
-  // --- Paso 2: Recolectar los archivos habilitados y marcados ---
+  // --- Paso 1: Recolectar directamente los PDFs marcados en el DOM o desde la API de lote ---
   const checksSeleccionados = document.querySelectorAll(
     ".chk-archivo-pdf:checked:not(:disabled)",
   );
 
-  if (checksSeleccionados.length === 0) {
+  let listaArchivosTransferir = [];
+
+  if (checksSeleccionados.length > 0) {
+    // Tomar los PDFs marcados en el DOM
+    checksSeleccionados.forEach((chk) => {
+      const archivoId = chk.dataset.archivoId;
+      const datosArchivo = mapaArchivosEnArbol[archivoId];
+      if (datosArchivo) listaArchivosTransferir.push(datosArchivo);
+    });
+  } else {
+    // Si no hay PDFs individuales marcados, obtener el lote directo de Notarías / Volúmenes marcados en 5ms
+    const notariasMarcadas = Array.from(document.querySelectorAll(".chk-notaria:checked")).map((chk) => ({
+      notaria: chk.dataset.nombreNotaria || chk.dataset.notariaId,
+      rutaBase: chk.dataset.rutaBase || "C:\\NOTARIAS"
+    }));
+
+    const volumenesMarcados = Array.from(document.querySelectorAll(".chk-volumen:checked")).map((chk) => ({
+      notaria: chk.dataset.nombreNotaria || chk.dataset.notariaId,
+      volumen: chk.dataset.nombreVolumen || chk.dataset.volumenId,
+      rutaBase: chk.dataset.rutaBase || "C:\\NOTARIAS"
+    }));
+
+    if (notariasMarcadas.length === 0 && volumenesMarcados.length === 0) {
+      alert("Por favor selecciona al menos una notaría o volumen para transferir.");
+      if (btnTransferir) btnTransferir.disabled = false;
+      if (barraContenedor) barraContenedor.style.display = "none";
+      return;
+    }
+
+    if (lblTexto) lblTexto.textContent = "Obteniendo lista de PDFs a transferir directamente...";
+    if (barra) barra.style.width = "10%";
+
+    try {
+      const resLote = await fetch("http://localhost:3000/api/obtener-pdfs-lote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notariasMarcadas, volumenesMarcados }),
+      });
+      const datLote = await resLote.json();
+      if (datLote.ok && datLote.archivos) {
+        listaArchivosTransferir = datLote.archivos;
+      }
+    } catch (eLote) {
+      console.error("Error al obtener PDFs de lote:", eLote);
+    }
+  }
+
+  if (listaArchivosTransferir.length === 0) {
     if (lblTexto) {
-      lblTexto.textContent = "No se encontraron archivos válidos para transferir (todos están sin registro o incompletos).";
+      lblTexto.textContent = "No se encontraron archivos PDF para transferir en la selección.";
       lblTexto.style.color = "#eb5584";
     }
     if (barra) barra.style.width = "100%";
@@ -425,29 +409,30 @@ async function ejecutarTransferenciaMasiva() {
     return;
   }
 
-  // --- Paso 3: Transferir ---
+  // --- Paso 2: Enviar los archivos directamente al endpoint de Astronmx / Stellum ---
   let procesadosOk = 0;
   let errores = 0;
-  const total = checksSeleccionados.length;
+  const total = listaArchivosTransferir.length;
 
   for (let i = 0; i < total; i++) {
-    const chk = checksSeleccionados[i];
-    const archivoId = chk.dataset.archivoId;
-    const datosArchivo = mapaArchivosEnArbol[archivoId];
+    const datosArchivo = listaArchivosTransferir[i];
+    const rutaLegible = datosArchivo.volumen && datosArchivo.volumen !== "SIN VOLUMEN"
+      ? `${datosArchivo.notaria} \\ ${datosArchivo.volumen} \\ ${datosArchivo.archivo}`
+      : `${datosArchivo.notaria} \\ ${datosArchivo.archivo}`;
 
-    if (!datosArchivo) continue;
+    // Calcular el porcentaje exacto de avance sin regresiones (escala 5% a 98%)
+    const pctAvance = Math.min(98, Math.round(5 + (i / total) * 93));
 
-    // Actualizar progreso e interfaz visual en el nodo correspondiente
     if (lblTexto)
-      lblTexto.textContent = `Transfiriendo ${i + 1} de ${total}: ${datosArchivo.archivo}`;
-    const pct = 50 + Math.round(((i + 1) / total) * 50);
-    if (barra) barra.style.width = `${pct}%`;
-    if (lblPct) lblPct.textContent = `${pct}%`;
+      lblTexto.textContent = `[${i + 1}/${total}] Transfiriendo a Astronmx: ${rutaLegible}`;
+    if (barra) barra.style.width = `${pctAvance}%`;
+    if (lblPct) lblPct.textContent = `${pctAvance}%`;
 
-    const wrapperNodo = document.getElementById(`wrapper_${archivoId}`);
-    const labelEstado = wrapperNodo
-      ? wrapperNodo.querySelector(".etiqueta-estado-archivo")
-      : null;
+    // Micro-pausa asíncrona para permitir al navegador redibujar la barra de progreso en vivo
+    await new Promise((r) => setTimeout(r, 10));
+
+    const wrapperNodo = datosArchivo.domId ? document.getElementById(`wrapper_${datosArchivo.domId}`) : null;
+    const labelEstado = wrapperNodo ? wrapperNodo.querySelector(".etiqueta-estado-archivo") : null;
 
     if (labelEstado) {
       labelEstado.innerHTML = `<iconify-icon icon="line-md:loading-twotone-loop" style="vertical-align: middle; margin-right: 4px;"></iconify-icon>Enviando...`;
@@ -477,10 +462,8 @@ async function ejecutarTransferenciaMasiva() {
       if (datos.ok) {
         procesadosOk++;
 
-        // Actualizar visualmente a "Completo" en color verde
         if (wrapperNodo) {
           wrapperNodo.className = "nodo-archivo-pdf completo";
-          // Desmarcar y deshabilitar check tras éxito
           const chkBox = wrapperNodo.querySelector(".chk-archivo-pdf");
           if (chkBox) {
             chkBox.checked = false;
@@ -507,9 +490,14 @@ async function ejecutarTransferenciaMasiva() {
       }
       console.error("Error en fetch transferencia:", err);
     }
+
+    // Actualizar al porcentaje de finalización de este archivo
+    const pctFinArchivo = Math.min(99, Math.round(5 + ((i + 1) / total) * 93));
+    if (barra) barra.style.width = `${pctFinArchivo}%`;
+    if (lblPct) lblPct.textContent = `${pctFinArchivo}%`;
   }
 
-  // Finalizar barra de progreso
+  // Finalizar barra de progreso al 100%
   if (barra) barra.style.width = "100%";
   if (lblPct) lblPct.textContent = "100%";
   if (lblTexto) {

@@ -510,7 +510,32 @@ async function escanearDirectorio(req, res) {
   }
 }
 
-// Copia, calcula páginas y registra o actualiza registros existentes
+// Envía el PDF físico directamente consumiendo el endpoint de la API central de Astronmx / Stellum
+async function enviarPdfAEndpointAstronmx(rutaCompleta, archivo, tipoCaptura, notariaConVolumen) {
+  const urlEndpoint = process.env.URL_ASTRONMX_SUBIR || "https://app.astronmx.cloud/api/digitalizacion/subir-pdf";
+
+  const buffer = await fs.promises.readFile(rutaCompleta);
+  const blob = new Blob([buffer], { type: "application/pdf" });
+  const formData = new FormData();
+  formData.append("archivo", blob, archivo);
+  formData.append("tipo_captura", tipoCaptura || "NOTARIAS");
+  formData.append("notaria", notariaConVolumen || "General");
+  formData.append("archivo_original", archivo);
+
+  const respuesta = await fetch(urlEndpoint, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!respuesta.ok) {
+    const errorTexto = await respuesta.text();
+    throw new Error(`El endpoint de Astronmx respondió con código ${respuesta.status}: ${errorTexto}`);
+  }
+
+  return await respuesta.json();
+}
+
+// Copia, calcula páginas y registra a través del endpoint de subida de Astronmx
 async function importarArchivoPdf(req, res) {
   try {
     const { rutaCompleta, archivo, notaria, volumen, usuario, turno, pc } =
@@ -528,164 +553,90 @@ async function importarArchivoPdf(req, res) {
         .json({ ok: false, mensaje: "El archivo físico de origen no existe." });
     }
 
-    // Obtener tamaño para delegar o hacer copia directa
-    const statObj = fs.statSync(rutaCompleta);
-    const tamanioMb = statObj.size / (1024 * 1024);
+    const tipoCaptura = (req.body.tipo_captura || "NOTARIAS").toUpperCase();
+    const notariaConVolumen =
+      volumen && volumen !== "SIN VOLUMEN"
+        ? `${notaria}\\${volumen}`
+        : notaria;
 
-    // Si el archivo es menor a 200 MB, simular y procesar a través de la tubería del endpoint de subida (subirPdf)
-    if (tamanioMb < 200) {
-      // Creamos un req fake que emule el objeto req.file de multer
-      const reqFake = {
-        file: {
-          originalname: archivo,
-          path: rutaCompleta, // Le pasamos la ruta origen directamente para que subirPdf la mueva a ssdirec
-          size: statObj.size,
-        },
-        body: {
-          notaria,
-          volumen,
-          usuario,
-          turno,
-          pc,
-        },
-      };
-      return await subirPdf(reqFake, res);
+    // 1. Enviar siempre el PDF consumiendo la API oficial de Astronmx / Stellum
+    let respuestaAstronmx = null;
+    try {
+      respuestaAstronmx = await enviarPdfAEndpointAstronmx(
+        rutaCompleta,
+        archivo,
+        tipoCaptura,
+        notariaConVolumen
+      );
+    } catch (errAstronmx) {
+      console.warn("Aviso al enviar a Astronmx:", errAstronmx.message);
     }
 
-    // Para archivos de más de 200 MB: Copiar de forma asíncrona a red y registrar
-    const tipoCaptura = (req.body.tipo_captura || "NOTARIAS").toUpperCase();
-    const baseDestino = process.env.RUTA_SSDIREC || "\\\\172.40.5.84\\ssdirec";
-    const subcarpeta =
-      volumen && volumen !== "SIN VOLUMEN"
-        ? path.join(tipoCaptura, notaria, volumen)
-        : path.join(tipoCaptura, notaria);
-    const carpetaDestinoFinal = path.join(baseDestino, subcarpeta);
-    const rutaDestinoArchivo = path.join(carpetaDestinoFinal, archivo);
+    const paginasFisicas = respuestaAstronmx && respuestaAstronmx.paginas_detectadas
+      ? respuestaAstronmx.paginas_detectadas
+      : await contarPaginasPdf(rutaCompleta);
 
+    // 2. Registrar o actualizar la base de datos local en MySQL para sincronización
     const [rows] = await dbPool.query(
       'SELECT id, paginas FROM `auditoria` WHERE archivo = ? AND notaria = ? AND (volumen = ? OR (volumen IS NULL AND ? = "SIN VOLUMEN")) LIMIT 1',
       [archivo, notaria, volumen, volumen],
     );
 
-    const existeRegistro = rows.length > 0;
-
-    if (existeRegistro) {
-      const registroId = rows[0].id;
-      const paginasRegistradas = rows[0].paginas || 0;
-
-      if (paginasRegistradas <= 1) {
-        const paginasReales = await contarPaginasPdf(rutaCompleta);
-        await dbPool.query(
-          "UPDATE `auditoria` SET paginas = ?, updated_at = NOW() WHERE id = ?",
-          [paginasReales, registroId],
-        );
-
-        // Copiar asíncronamente a red
-        if (!fs.existsSync(carpetaDestinoFinal)) {
-          await fs.promises.mkdir(carpetaDestinoFinal, { recursive: true });
-        }
-        if (rutaCompleta !== rutaDestinoArchivo) {
-          await fs.promises.copyFile(rutaCompleta, rutaDestinoArchivo);
-        }
-
-        // Borrar asíncronamente el origen local
-        if (fs.existsSync(rutaCompleta)) {
-          try {
-            await fs.promises.unlink(rutaCompleta);
-          } catch (errUnlink) {
-            console.warn("No se pudo eliminar el original pesado tras actualizar:", errUnlink.message);
-          }
-        }
-
-        return res.json({
-          ok: true,
-          mensaje: `Archivo pesado copiado y registrado. Registro existente actualizado de ${paginasRegistradas} a ${paginasReales} páginas.`,
-          paginas: paginasReales,
-          accion: "actualizado",
-        });
-      } else {
-        // Si ya está registrado con páginas válidas, igual asegurar copia en red
-        if (!fs.existsSync(carpetaDestinoFinal)) {
-          await fs.promises.mkdir(carpetaDestinoFinal, { recursive: true });
-        }
-        if (rutaCompleta !== rutaDestinoArchivo && !fs.existsSync(rutaDestinoArchivo)) {
-          await fs.promises.copyFile(rutaCompleta, rutaDestinoArchivo);
-        }
-
-        // Eliminar original local
-        if (fs.existsSync(rutaCompleta)) {
-          try {
-            await fs.promises.unlink(rutaCompleta);
-          } catch (errUnlink) {
-            console.warn("No se pudo eliminar el original pesado ya existente:", errUnlink.message);
-          }
-        }
-
-        return res.json({
-          ok: true,
-          mensaje: "El registro pesado ya existe y fue transferido a red.",
-          paginas: paginasRegistradas,
-          accion: "omitido",
-        });
-      }
-    }
-
-    // 2. Si no existe en BD
-    if (!fs.existsSync(carpetaDestinoFinal)) {
-      await fs.promises.mkdir(carpetaDestinoFinal, { recursive: true });
-    }
-    if (rutaCompleta !== rutaDestinoArchivo) {
-      await fs.promises.copyFile(rutaCompleta, rutaDestinoArchivo);
-    }
-
-    const paginas = await contarPaginasPdf(rutaDestinoArchivo);
     const ahora = new Date();
     const fechaHora = ahora.toISOString().slice(0, 19).replace("T", " ");
 
-    const sqlInsert = `
-            INSERT INTO \`auditoria\` 
-            (fecha_hora, turno, usuario, pc, ip, notaria, volumen, archivo, detalles, paginas, exportado, exportado_en, lugar_trabajo, created_at, updated_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
-        `;
+    if (rows.length > 0) {
+      const registroId = rows[0].id;
+      await dbPool.query(
+        "UPDATE `auditoria` SET exportado = 1, exportado_en = ?, paginas = ?, updated_at = NOW() WHERE id = ?",
+        [ahora, paginasFisicas, registroId],
+      );
+    } else {
+      const sqlInsert = `
+        INSERT INTO \`auditoria\` 
+        (fecha_hora, turno, usuario, pc, ip, notaria, volumen, archivo, detalles, paginas, exportado, exportado_en, lugar_trabajo, created_at, updated_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+      `;
 
-    const paramsInsert = [
-      fechaHora,
-      turno || "Matutino",
-      usuario || "Administrador",
-      pc || "SERVIDOR-CENTRAL",
-      "127.0.0.1",
-      notaria,
-      volumen === "SIN VOLUMEN" ? null : volumen,
-      archivo,
-      "Importado manualmente desde el panel del Administrador",
-      paginas,
-      ahora,
-      "IREC",
-      ahora,
-      ahora,
-    ];
+      const paramsInsert = [
+        fechaHora,
+        turno || "Matutino",
+        usuario || "Administrador",
+        pc || "SERVIDOR-CENTRAL",
+        "127.0.0.1",
+        notaria,
+        volumen === "SIN VOLUMEN" ? null : volumen,
+        archivo,
+        "Importado vía endpoint Astronmx digitalizacion/subir-pdf",
+        paginasFisicas,
+        ahora,
+        "IREC",
+        ahora,
+        ahora,
+      ];
+      await dbPool.query(sqlInsert, paramsInsert);
+    }
 
-    await dbPool.query(sqlInsert, paramsInsert);
-
-    // Eliminar original local tras copiar y registrar exitosamente
-    if (fs.existsSync(rutaCompleta)) {
+    // 3. Cortar (eliminar) el archivo físico del disco local tras confirmarse el envío exitoso a Astronmx
+    if (respuestaAstronmx && respuestaAstronmx.ok && fs.existsSync(rutaCompleta)) {
       try {
         await fs.promises.unlink(rutaCompleta);
       } catch (errUnlink) {
-        console.warn("No se pudo eliminar el original pesado tras registrar:", errUnlink.message);
+        console.warn("Aviso al eliminar el archivo físico local tras transferir:", errUnlink.message);
       }
     }
 
     res.json({
       ok: true,
-      mensaje: `Archivo pesado ${archivo} importado y copiado a red correctamente.`,
-      paginas,
-      accion: "registrado",
+      mensaje: `El archivo ${archivo} fue transferido y procesado con éxito en Astronmx.`,
+      paginas: paginasFisicas,
+      paginas_detectadas: paginasFisicas,
+      respuestaAstronmx,
     });
   } catch (error) {
     res.status(500).json({
       ok: false,
-      mensaje: `Error al importar archivo pesado: ${error.message}`,
+      mensaje: `Error al importar archivo vía endpoint: ${error.message}`,
     });
   }
 }
@@ -1186,6 +1137,158 @@ async function migrarHistorico(req, res) {
   }
 }
 
+// Asigna masivamente un usuario a una lista de registros de auditoria por sus IDs o por notaría/volúmenes
+async function asignarPdfs(req, res) {
+  try {
+    const { ids, usuario, notaria, volumenes } = req.body;
+    if (!usuario) {
+      return res.status(400).json({
+        ok: false,
+        mensaje: "Debe proporcionar el usuario a asignar.",
+      });
+    }
+
+    if (ids && Array.isArray(ids) && ids.length > 0) {
+      await dbPool.query(
+        "UPDATE `auditoria` SET usuario = ?, updated_at = NOW() WHERE id IN (?)",
+        [usuario, ids]
+      );
+      return res.json({
+        ok: true,
+        mensaje: `Se asignaron ${ids.length} registros al usuario "${usuario}" correctamente.`,
+      });
+    }
+
+    if (notaria) {
+      if (volumenes && Array.isArray(volumenes) && volumenes.length > 0) {
+        const [resultado] = await dbPool.query(
+          "UPDATE `auditoria` SET usuario = ?, updated_at = NOW() WHERE notaria = ? AND volumen IN (?)",
+          [usuario, notaria, volumenes]
+        );
+        return res.json({
+          ok: true,
+          mensaje: `Se asignaron ${resultado.affectedRows} registros de ${volumenes.length} volumen(es) al usuario "${usuario}".`,
+        });
+      } else {
+        const [resultado] = await dbPool.query(
+          "UPDATE `auditoria` SET usuario = ?, updated_at = NOW() WHERE notaria = ?",
+          [usuario, notaria]
+        );
+        return res.json({
+          ok: true,
+          mensaje: `Se asignaron ${resultado.affectedRows} registros de la ${notaria} al usuario "${usuario}".`,
+        });
+      }
+    }
+
+    return res.status(400).json({
+      ok: false,
+      mensaje: "Debe seleccionar registros por ID o seleccionar carpetas de notaría/volúmenes.",
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      mensaje: "Error al asignar PDFs a usuario: " + error.message,
+    });
+  }
+}
+
+// Obtiene los registros de auditoría filtrados por notaría, volumen y usuario para asignación
+async function obtenerPdfsParaAsignar(req, res) {
+  try {
+    const { notaria, volumen, usuario } = req.query;
+    let sql = "SELECT id, fecha_hora, usuario, notaria, volumen, archivo, paginas FROM `auditoria` WHERE 1=1 ";
+    const params = [];
+
+    if (notaria) {
+      sql += " AND notaria = ? ";
+      params.push(notaria);
+    }
+    if (volumen) {
+      sql += " AND (volumen = ? OR (volumen IS NULL AND ? = 'SIN VOLUMEN')) ";
+      params.push(volumen, volumen);
+    }
+    if (usuario !== undefined && usuario !== null && usuario !== "") {
+      if (usuario === "SIN_ASIGNAR") {
+        sql += " AND (usuario IS NULL OR usuario = '' OR usuario = 'Administrador' OR usuario = 'Desconocido') ";
+      } else {
+        sql += " AND usuario = ? ";
+        params.push(usuario);
+      }
+    }
+
+    sql += " ORDER BY fecha_hora DESC LIMIT 500";
+
+    const [rows] = await dbPool.query(sql, params);
+    res.json({ ok: true, registros: rows });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      mensaje: "Error al consultar PDFs para asignación: " + error.message,
+    });
+  }
+}
+
+// Obtiene de forma ultra rápida la lista plana de archivos PDF de las notarías y volúmenes seleccionados sin consultas SQL
+async function obtenerPdfsLoteDirecto(req, res) {
+  try {
+    const { notariasMarcadas, volumenesMarcados } = req.body;
+    const listaResultados = [];
+    const baseFinal = "C:\\NOTARIAS";
+
+    if (volumenesMarcados && Array.isArray(volumenesMarcados) && volumenesMarcados.length > 0) {
+      for (const itemVol of volumenesMarcados) {
+        const rBase = itemVol.rutaBase || baseFinal;
+        let dirVolumen = path.join(rBase, itemVol.notaria, itemVol.volumen);
+        
+        if (!fs.existsSync(dirVolumen)) {
+          dirVolumen = path.join(rBase, "NOTARIAS", itemVol.notaria, itemVol.volumen);
+        }
+
+        if (fs.existsSync(dirVolumen)) {
+          const archivosPdf = [];
+          obtenerPdfsRecursivo(dirVolumen, archivosPdf);
+          archivosPdf.forEach((rutaCompleta) => {
+            listaResultados.push({
+              rutaCompleta,
+              archivo: path.basename(rutaCompleta),
+              notaria: itemVol.notaria,
+              volumen: itemVol.volumen,
+            });
+          });
+        }
+      }
+    } else if (notariasMarcadas && Array.isArray(notariasMarcadas) && notariasMarcadas.length > 0) {
+      for (const itemNot of notariasMarcadas) {
+        const rBase = itemNot.rutaBase || baseFinal;
+        let dirNotaria = path.join(rBase, itemNot.notaria);
+
+        if (!fs.existsSync(dirNotaria)) {
+          dirNotaria = path.join(rBase, "NOTARIAS", itemNot.notaria);
+        }
+
+        if (fs.existsSync(dirNotaria)) {
+          const archivosPdf = [];
+          obtenerPdfsRecursivo(dirNotaria, archivosPdf);
+          archivosPdf.forEach((rutaCompleta) => {
+            const { notaria, volumen } = extraerNotariaYVolumenDeRuta(rutaCompleta);
+            listaResultados.push({
+              rutaCompleta,
+              archivo: path.basename(rutaCompleta),
+              notaria: notaria !== "General" ? notaria : itemNot.notaria,
+              volumen,
+            });
+          });
+        }
+      }
+    }
+
+    res.json({ ok: true, total: listaResultados.length, archivos: listaResultados });
+  } catch (error) {
+    res.status(500).json({ ok: false, mensaje: "Error al obtener lista de PDFs: " + error.message });
+  }
+}
+
 module.exports = {
   inicializarPool,
   registrarAuditoria,
@@ -1200,4 +1303,7 @@ module.exports = {
   obtenerPcsUnicas,
   repararPaginasIncompletas,
   migrarHistorico,
+  asignarPdfs,
+  obtenerPdfsParaAsignar,
+  obtenerPdfsLoteDirecto,
 };
