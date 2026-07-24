@@ -10,7 +10,7 @@ const { exec } = require("child_process");
 
 let dbPool = null;
 
-// Helper para calcular la fecha fiscal de jornada y el turno en base a los horarios y fines de semana
+// Helper para calcular la fecha fiscal de jornada y el turno en base a los horarios locales y fines de semana
 function resolverFechaYTurnoDeJornada(fechaHoraStr) {
   let hora = 0;
   let fechaJornada;
@@ -19,26 +19,16 @@ function resolverFechaYTurnoDeJornada(fechaHoraStr) {
     hora = fechaHoraStr.getHours();
     fechaJornada = new Date(fechaHoraStr);
   } else if (typeof fechaHoraStr === "string") {
-    // La base de datos central almacena la hora en UTC. Al agregar 'Z' indicamos a JavaScript
-    // que el string está en UTC para que lo convierta automáticamente a la hora local del sistema.
-    const stringIso = fechaHoraStr.replace(" ", "T") + "Z";
-    const d = new Date(stringIso);
+    // Parsear fecha_hora en hora local sin alterar la zona horaria (evitando desfasar 6 horas con 'Z')
+    const partes = fechaHoraStr.split(" ");
+    const fechaPartes = partes[0].split("-");
+    const horaPartes = (partes[1] || "00:00:00").split(":");
+    const anio = parseInt(fechaPartes[0], 10);
+    const mes = parseInt(fechaPartes[1], 10) - 1;
+    const dia = parseInt(fechaPartes[2], 10);
+    hora = parseInt(horaPartes[0], 10);
 
-    if (!isNaN(d.getTime())) {
-      hora = d.getHours();
-      fechaJornada = d;
-    } else {
-      const partes = fechaHoraStr.split(" ");
-      const fechaPartes = partes[0].split("-");
-      const horaPartes = partes[1].split(":");
-      hora = parseInt(horaPartes[0], 10);
-      fechaJornada = new Date(
-        parseInt(fechaPartes[0], 10),
-        parseInt(fechaPartes[1], 10) - 1,
-        parseInt(fechaPartes[2], 10),
-        12, 0, 0
-      );
-    }
+    fechaJornada = new Date(anio, mes, dia, hora, parseInt(horaPartes[1] || 0, 10), parseInt(horaPartes[2] || 0, 10));
   } else {
     const d = new Date(fechaHoraStr);
     hora = d.getHours();
@@ -58,7 +48,7 @@ function resolverFechaYTurnoDeJornada(fechaHoraStr) {
       fechaJornada.setDate(fechaJornada.getDate() - 1);
     }
   }
-  
+
   // Fines de semana: si la jornada cae en Sabado (6) o Domingo (0), se acumulan al dia Viernes anterior
   const diaSemana = fechaJornada.getDay();
   if (diaSemana === 6) {
@@ -66,11 +56,13 @@ function resolverFechaYTurnoDeJornada(fechaHoraStr) {
   } else if (diaSemana === 0) {
     fechaJornada.setDate(fechaJornada.getDate() - 2);
   }
-  
-  const y = fechaJornada.getFullYear();
-  const m = String(fechaJornada.getMonth() + 1).padStart(2, '0');
-  const d = String(fechaJornada.getDate()).padStart(2, '0');
-  return { fechaStr: `${y}-${m}-${d}`, turno };
+
+  const a = fechaJornada.getFullYear();
+  const m = String(fechaJornada.getMonth() + 1).padStart(2, "0");
+  const d = String(fechaJornada.getDate()).padStart(2, "0");
+  const fechaStr = `${a}-${m}-${d}`;
+
+  return { fechaStr, turno };
 }
 
 // Inicializa el pool de base de datos desde server.js
@@ -187,9 +179,15 @@ async function obtenerProductividadDiaria(req, res) {
 
     const [registros] = await dbPool.query(
       `
-            SELECT DATE_FORMAT(fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, usuario, paginas, turno
-            FROM \`auditoria\`
-            WHERE fecha_hora >= ? AND fecha_hora <= ?
+            SELECT 
+                DATE_FORMAT(a.fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, 
+                a.usuario, 
+                a.paginas, 
+                a.turno,
+                u.turno AS turno_usuario
+            FROM \`auditoria\` a
+            LEFT JOIN \`usuarios\` u ON a.usuario = u.nombre_usuario
+            WHERE a.fecha_hora >= ? AND a.fecha_hora <= ?
         `,
       [fechaInicioCompleta, fechaFinCompleta],
     );
@@ -197,8 +195,8 @@ async function obtenerProductividadDiaria(req, res) {
     const agrupadoDiario = {};
 
     registros.forEach((r) => {
-      const { fechaStr, turno } = resolverFechaYTurnoDeJornada(r.fecha_hora);
-      const turnoFinal = turno; // Clasificación estricta por rango de horario
+      const { fechaStr, turno: turnoCalculado } = resolverFechaYTurnoDeJornada(r.fecha_hora);
+      const turnoFinal = r.turno_usuario || r.turno || turnoCalculado || "Matutino";
       const usuario = r.usuario || "Desconocido";
       const paginas = parseInt(r.paginas || 0, 10);
 
@@ -258,13 +256,14 @@ async function exportarExcelAuditoria(req, res) {
     const fechaInicioCompleta = `${fecha_inicio} 06:00:00`;
     const fechaFinCompleta = `${fechaFinMas1} 05:59:59`;
 
-    // Consultar todos los registros en el rango de fecha/hora de jornada, uniendo con usuarios
+    // Consultar todos los registros en el rango de fecha/hora de jornada, uniendo con usuarios y su turno oficial
     const [registros] = await dbPool.query(
       `
             SELECT 
                 a.id, 
                 DATE_FORMAT(a.fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, 
                 a.turno, 
+                u.turno AS turno_usuario,
                 a.usuario, 
                 COALESCE(u.nombre_completo, UPPER(a.usuario)) AS nombre_completo,
                 a.pc, 
@@ -293,7 +292,7 @@ async function exportarExcelAuditoria(req, res) {
     const registrosPorFecha = {};
     registros.forEach((reg) => {
       const { fechaStr, turno } = resolverFechaYTurnoDeJornada(reg.fecha_hora);
-      const turnoFinal = turno; // Clasificación estricta por rango de horario
+      const turnoFinal = reg.turno_usuario || reg.turno || turno || "Matutino";
       reg.fecha_calculada = fechaStr;
       reg.turno_calculado = turnoFinal;
 
@@ -353,15 +352,18 @@ async function exportarExcelAuditoria(req, res) {
 
     // 3. Si se solicita formato concentrado, generar el reporte matricial en una sola hoja
     if (tipo === "concentrado") {
-      const fechasOrdenadas = [...new Set(registrosDeduplicados.map((r) => r.fecha_calculada))].sort(
-        (a, b) => new Date(a) - new Date(b),
-      );
+      const fechasOrdenadas = [...new Set(registrosDeduplicados.map((r) => r.fecha_calculada))]
+        .filter((f) => f >= fecha_inicio && f <= fecha_fin)
+        .sort((a, b) => new Date(a) - new Date(b));
 
       const mapaGeneral = {};
       registrosDeduplicados.forEach((reg) => {
+        const fecha = reg.fecha_calculada;
+        if (fecha < fecha_inicio || fecha > fecha_fin) return;
+
         const nombreKey = reg.nombre_completo.toUpperCase();
-        // Obtener el turno oficial de la base de datos o el calculado por horario como fallback
-        const turnoOficial = (reg.turno || reg.turno_calculado || "Matutino").toUpperCase();
+        // Dar prioridad al turno oficial de la tabla de usuarios
+        const turnoOficial = (reg.turno_usuario || reg.turno || reg.turno_calculado || "Matutino").toUpperCase();
 
         if (!mapaGeneral[nombreKey]) {
           mapaGeneral[nombreKey] = {
@@ -370,7 +372,6 @@ async function exportarExcelAuditoria(req, res) {
             capturasPorFecha: {}, // fechaStr -> { pdfs, imagenes }
           };
         }
-        const fecha = reg.fecha_calculada;
         if (!mapaGeneral[nombreKey].capturasPorFecha[fecha]) {
           mapaGeneral[nombreKey].capturasPorFecha[fecha] = { pdfs: 0, imagenes: 0 };
         }
@@ -524,15 +525,24 @@ async function exportarExcelAuditoria(req, res) {
       const dia = String(ahora.getDate()).padStart(2, "0");
       const hora = String(ahora.getHours()).padStart(2, "0");
       const min = String(ahora.getMinutes()).padStart(2, "0");
-      const nombreArchivo = `Reporte_Concentrado_Auditoria_${anio}${mes}${dia}_${hora}${min}.xlsx`;
+      const seg = String(ahora.getSeconds()).padStart(2, "0");
+      let nombreArchivo = `Reporte_Concentrado_Auditoria_${anio}${mes}${dia}_${hora}${min}${seg}.xlsx`;
 
       const carpetaDescargas = path.join(
         process.env.USERPROFILE || process.env.HOME || "C:\\",
         "Downloads",
       );
-      const rutaCompleta = path.join(carpetaDescargas, nombreArchivo);
+      let rutaCompleta = path.join(carpetaDescargas, nombreArchivo);
 
-      await workbook.xlsx.writeFile(rutaCompleta);
+      try {
+        await workbook.xlsx.writeFile(rutaCompleta);
+      } catch (errWrite) {
+        // Manejo anti-bloqueo EBUSY en Windows
+        const timestampAlt = Date.now().toString().slice(-4);
+        nombreArchivo = `Reporte_Concentrado_Auditoria_${anio}${mes}${dia}_${hora}${min}${seg}_${timestampAlt}.xlsx`;
+        rutaCompleta = path.join(carpetaDescargas, nombreArchivo);
+        await workbook.xlsx.writeFile(rutaCompleta);
+      }
 
       // Abrir archivo automáticamente
       exec(`start "" "${rutaCompleta}"`, (err) => {
@@ -572,7 +582,7 @@ async function exportarExcelAuditoria(req, res) {
         registrosAgrupados[fecha][pc][ip][usuario] = {};
       }
 
-      const turno = reg.turno_calculado;
+      const turno = reg.turno_usuario || reg.turno || reg.turno_calculado || "Matutino";
       if (!registrosAgrupados[fecha][pc][ip][usuario][turno]) {
         registrosAgrupados[fecha][pc][ip][usuario][turno] = [];
       }
@@ -716,15 +726,23 @@ async function exportarExcelAuditoria(req, res) {
     const dia = String(ahora.getDate()).padStart(2, "0");
     const hora = String(ahora.getHours()).padStart(2, "0");
     const min = String(ahora.getMinutes()).padStart(2, "0");
-    const nombreArchivo = `Reporte_Diario_Auditoria_${anio}${mes}${dia}_${hora}${min}.xlsx`;
+    const seg = String(ahora.getSeconds()).padStart(2, "0");
+    let nombreArchivo = `Reporte_Diario_Auditoria_${anio}${mes}${dia}_${hora}${min}${seg}.xlsx`;
 
     const carpetaDescargas = path.join(
       process.env.USERPROFILE || process.env.HOME || "C:\\",
       "Downloads",
     );
-    const rutaCompleta = path.join(carpetaDescargas, nombreArchivo);
+    let rutaCompleta = path.join(carpetaDescargas, nombreArchivo);
 
-    await workbook.xlsx.writeFile(rutaCompleta);
+    try {
+      await workbook.xlsx.writeFile(rutaCompleta);
+    } catch (errWrite) {
+      const timestampAlt = Date.now().toString().slice(-4);
+      nombreArchivo = `Reporte_Diario_Auditoria_${anio}${mes}${dia}_${hora}${min}${seg}_${timestampAlt}.xlsx`;
+      rutaCompleta = path.join(carpetaDescargas, nombreArchivo);
+      await workbook.xlsx.writeFile(rutaCompleta);
+    }
 
     // Abrir automáticamente el archivo
     exec(`start "" "${rutaCompleta}"`, (err) => {

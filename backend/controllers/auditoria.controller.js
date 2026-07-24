@@ -14,7 +14,7 @@ function inicializarPool(pool) {
   dbPool = pool;
 }
 
-// Función auxiliar para obtener el total de páginas de un PDF de forma asíncrona
+// Función auxiliar para obtener el total de páginas de un PDF de forma asíncrona (soportando PDFs gigantes)
 async function contarPaginasPdf(rutaCompleta) {
   try {
     if (!fs.existsSync(rutaCompleta)) return 0;
@@ -22,44 +22,55 @@ async function contarPaginasPdf(rutaCompleta) {
     const stat = fs.statSync(rutaCompleta);
     const tamanio = stat.size;
 
-    // Leer primeros 100 KB
+    // 1. Leer los primeros 300 KB y los últimos 300 KB del archivo
     const fd = fs.openSync(rutaCompleta, "r");
-    const bufferInicio = Buffer.alloc(Math.min(102400, tamanio));
+    const tamBloque = Math.min(307200, tamanio);
+
+    const bufferInicio = Buffer.alloc(tamBloque);
     fs.readSync(fd, bufferInicio, 0, bufferInicio.length, 0);
 
-    // Leer últimos 100 KB
-    const bufferFin = Buffer.alloc(Math.min(102400, tamanio));
-    const posicionInicioFin = Math.max(0, tamanio - bufferFin.length);
-    fs.readSync(fd, bufferFin, 0, bufferFin.length, posicionInicioFin);
+    const bufferFin = Buffer.alloc(tamBloque);
+    const posFin = Math.max(0, tamanio - tamBloque);
+    fs.readSync(fd, bufferFin, 0, bufferFin.length, posFin);
     fs.closeSync(fd);
 
-    // Buscar /Count en el contenido de inicio
-    const contenidoInicio = bufferInicio.toString("ascii");
-    let matches = contenidoInicio.match(/\/Count\s+(\d+)/);
-    if (matches && matches[1]) {
-      return parseInt(matches[1], 10);
+    const textoCompleto = bufferInicio.toString("latin1") + "\n" + bufferFin.toString("latin1");
+
+    // Buscar expresamente el nodo raíz de páginas del PDF (/Type /Pages ... /Count N)
+    const matchTypePages =
+      textoCompleto.match(/\/Type\s*\/Pages[\s\S]{1,500}?\/Count\s+(\d+)/i) ||
+      textoCompleto.match(/\/Count\s+(\d+)[\s\S]{1,500}?\/Type\s*\/Pages/i);
+
+    if (matchTypePages && matchTypePages[1]) {
+      const num = parseInt(matchTypePages[1], 10);
+      if (num > 0) return num;
     }
 
-    // Buscar /Count en el contenido de fin
-    const contenidoFin = bufferFin.toString("ascii");
-    matches = contenidoFin.match(/\/Count\s+(\d+)/);
-    if (matches && matches[1]) {
-      return parseInt(matches[1], 10);
+    // Si no se detecta la firma directa, recopilar todos los /Count y tomar el mayor número coherente
+    const todosCounts = [...textoCompleto.matchAll(/\/Count\s+(\d+)/gi)];
+    if (todosCounts.length > 0) {
+      let maxCount = 0;
+      for (const m of todosCounts) {
+        const val = parseInt(m[1], 10);
+        if (val > maxCount) maxCount = val;
+      }
+      if (maxCount > 0) return maxCount;
     }
 
-    // Fallback: solo si es un archivo liviano (< 15 MB) usar pdf-lib
-    if (tamanio < 15 * 1024 * 1024) {
+    // 2. Fallback de respaldo con pdf-lib (soportando tomos de hasta 300 MB)
+    if (tamanio < 300 * 1024 * 1024) {
       const pdfBytes = fs.readFileSync(rutaCompleta);
       const pdfDoc = await PDFDocument.load(pdfBytes, {
         ignoreEncryption: true,
+        updateMetadata: false,
       });
       return pdfDoc.getPageCount();
     }
 
-    return 0;
+    return 1;
   } catch (e) {
-    console.warn("Aviso al contar páginas de forma optimizada:", e.message);
-    return 0;
+    console.warn("Aviso al contar páginas de PDF:", e.message);
+    return 1;
   }
 }
 
