@@ -604,7 +604,6 @@ async function exportarExcelAuditoria(req, res) {
       worksheet.columns = [
         { header: "PC", key: "pc", width: 15 },
         { header: "Lugar de Trabajo", key: "lugar", width: 22 },
-        { header: "IP", key: "ip", width: 18 },
         { header: "Usuario", key: "usuario", width: 28 },
         { header: "Turno", key: "turno", width: 15 },
         { header: "Capturas (PDFs)", key: "pdfs", width: 18 },
@@ -650,7 +649,6 @@ async function exportarExcelAuditoria(req, res) {
               listaFilas.push({
                 pc,
                 lugar,
-                ip,
                 usuario,
                 turno,
                 pdfs: totalPdfs,
@@ -673,7 +671,6 @@ async function exportarExcelAuditoria(req, res) {
         const row = worksheet.addRow({
           pc: fila.pc,
           lugar: fila.lugar,
-          ip: fila.ip,
           usuario: fila.usuario,
           turno: fila.turno,
           pdfs: fila.pdfs,

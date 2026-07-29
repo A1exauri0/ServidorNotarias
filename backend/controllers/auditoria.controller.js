@@ -262,8 +262,8 @@ async function subirPdf(req, res) {
       const paramsInsert = [
         fechaHora,
         req.body.turno || "Matutino",
-        req.body.usuario || "Administrador",
-        req.body.pc || "SERVIDOR-CENTRAL",
+        req.body.usuario || null,
+        req.body.pc || null,
         "127.0.0.1",
         notaria,
         volumen === "SIN VOLUMEN" ? null : volumen,
@@ -628,10 +628,22 @@ async function importarArchivoPdf(req, res) {
 
     if (rows.length > 0) {
       const registroId = rows[0].id;
-      await dbPool.query(
-        "UPDATE `auditoria` SET exportado = 1, exportado_en = ?, paginas = ?, updated_at = NOW() WHERE id = ?",
-        [ahora, paginasFisicas, registroId],
-      );
+      const datosUpdate = [ahora, paginasFisicas];
+      let sqlUpdate = "UPDATE `auditoria` SET exportado = 1, exportado_en = ?, paginas = ?";
+
+      if (usuario && usuario !== "Administrador") {
+        sqlUpdate += ", usuario = ?";
+        datosUpdate.push(usuario);
+      }
+      if (pc && pc !== "SERVIDOR-CENTRAL") {
+        sqlUpdate += ", pc = ?";
+        datosUpdate.push(pc);
+      }
+
+      sqlUpdate += ", updated_at = NOW() WHERE id = ?";
+      datosUpdate.push(registroId);
+
+      await dbPool.query(sqlUpdate, datosUpdate);
     } else {
       const sqlInsert = `
         INSERT INTO \`auditoria\` 
@@ -642,8 +654,8 @@ async function importarArchivoPdf(req, res) {
       const paramsInsert = [
         fechaHora,
         turno || "Matutino",
-        usuario || "Administrador",
-        pc || "SERVIDOR-CENTRAL",
+        usuario && usuario !== "Administrador" ? usuario : null,
+        pc && pc !== "SERVIDOR-CENTRAL" ? pc : null,
         "127.0.0.1",
         notaria,
         volumen === "SIN VOLUMEN" ? null : volumen,
@@ -1445,15 +1457,32 @@ async function iniciarTransferenciaSegundoPlano(req, res) {
             : `${item.notaria} \\ ${item.archivo}`;
 
           try {
+            // Consultar datos originales del registro (usuario, pc, turno) si ya existían
+            let userOrig = item.usuario && item.usuario !== "Administrador" ? item.usuario : null;
+            let pcOrig = item.pc && item.pc !== "SERVIDOR-CENTRAL" ? item.pc : null;
+            let turnoOrig = item.turno || "Matutino";
+
+            if (!userOrig) {
+              const [rowsReg] = await dbPool.query(
+                "SELECT usuario, pc, turno FROM `auditoria` WHERE archivo = ? AND notaria = ? LIMIT 1",
+                [item.archivo, item.notaria]
+              );
+              if (rowsReg.length > 0) {
+                if (rowsReg[0].usuario && rowsReg[0].usuario !== "Administrador") userOrig = rowsReg[0].usuario;
+                if (rowsReg[0].pc && rowsReg[0].pc !== "SERVIDOR-CENTRAL") pcOrig = rowsReg[0].pc;
+                if (rowsReg[0].turno) turnoOrig = rowsReg[0].turno;
+              }
+            }
+
             const reqSim = {
               body: {
                 rutaCompleta: item.rutaCompleta,
                 archivo: item.archivo,
                 notaria: item.notaria,
                 volumen: item.volumen,
-                usuario: "Administrador",
-                turno: "Matutino",
-                pc: "SERVIDOR-CENTRAL",
+                usuario: userOrig,
+                turno: turnoOrig,
+                pc: pcOrig,
               },
             };
 
