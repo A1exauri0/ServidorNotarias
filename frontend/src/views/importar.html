@@ -137,6 +137,22 @@
                 </div>
             </div>
 
+            <!-- Panel de Bitácora de Errores Detallados -->
+            <div id="panelErroresImportar" style="display: none; margin-bottom: 20px; padding: 15px; border: 1px solid rgba(235, 85, 132, 0.3); border-radius: 10px; background-color: rgba(235, 85, 132, 0.05);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <span style="font-weight: 600; font-size: 13px; color: #eb5584; display: flex; align-items: center; gap: 6px;">
+                        <iconify-icon icon="mdi:alert-circle-outline" style="font-size: 18px;"></iconify-icon>
+                        <span>Detalles de Errores al Transferir</span>
+                    </span>
+                    <button type="button" id="btnLimpiarErroresImportar" onclick="document.getElementById('panelErroresImportar').style.display='none';" style="background: transparent; border: none; color: var(--color-texto-secundario); font-size: 11px; cursor: pointer; text-decoration: underline;">
+                        Ocultar Lista
+                    </button>
+                </div>
+                <div id="listaErroresDetallados" style="max-height: 180px; overflow-y: auto; font-size: 12px; font-family: monospace; display: flex; flex-direction: column; gap: 6px;">
+                    <!-- Registros dinámicos con causa exacta -->
+                </div>
+            </div>
+
             <!-- Acciones Finales -->
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div id="lblEstadoEscaneo" style="font-size: 12.5px; color: var(--color-texto-secundario); font-weight: 500;"></div>

@@ -440,12 +440,27 @@ function iniciarSondeoSegundoPlano() {
         const lblPct = document.getElementById("lblPorcentaje");
         const btnTransferir = document.getElementById("btnTransferirTodo");
 
+        const panelErrores = document.getElementById("panelErroresImportar");
+        const listaErrores = document.getElementById("listaErroresDetallados");
+
         if (est.activo) {
           if (barraContenedor) barraContenedor.style.display = "block";
           if (barra) barra.style.width = `${est.pct}%`;
           if (lblPct) lblPct.textContent = `${est.pct}%`;
           if (lblTexto) lblTexto.textContent = est.mensajeTexto;
           if (btnTransferir) btnTransferir.disabled = true;
+
+          // Renderizar errores progresivos si ocurren durante la transferencia
+          if (est.detallesErrores && est.detallesErrores.length > 0) {
+            if (panelErrores) panelErrores.style.display = "block";
+            if (listaErrores) {
+              listaErrores.innerHTML = est.detallesErrores.map((err) => `
+                <div style="padding: 4px 8px; background: rgba(235, 85, 132, 0.1); border-radius: 4px; border-left: 3px solid #eb5584; margin-bottom: 4px;">
+                  <strong>[${err.hora}] ${err.archivo}</strong> (${err.notaria}): <span style="color: var(--color-texto);">${err.error}</span>
+                </div>
+              `).join("");
+            }
+          }
         } else {
           if (est.total > 0) {
             if (barraContenedor) barraContenedor.style.display = "block";
@@ -454,6 +469,22 @@ function iniciarSondeoSegundoPlano() {
             if (lblTexto) {
               lblTexto.textContent = `Transferencia finalizada: ${est.exitosos} exitosos, ${est.errores} fallidos.`;
               lblTexto.style.color = est.errores > 0 ? "#eb5584" : "#2ebd75";
+            }
+
+            if (est.detallesErrores && est.detallesErrores.length > 0) {
+              if (panelErrores) panelErrores.style.display = "block";
+              if (listaErrores) {
+                listaErrores.innerHTML = est.detallesErrores.map((err) => `
+                  <div style="padding: 4px 8px; background: rgba(235, 85, 132, 0.1); border-radius: 4px; border-left: 3px solid #eb5584; margin-bottom: 4px;">
+                    <strong>[${err.hora}] ${err.archivo}</strong> (${err.notaria}): <span style="color: var(--color-texto);">${err.error}</span>
+                  </div>
+                `).join("");
+              }
+              console.group("❌ Bitácora de Errores de Transferencia");
+              est.detallesErrores.forEach((err) => {
+                console.error(`[${err.hora}] Archivo: ${err.archivo} | Notaría: ${err.notaria} | Causa: ${err.error}`);
+              });
+              console.groupEnd();
             }
           }
           if (btnTransferir) btnTransferir.disabled = false;

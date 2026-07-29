@@ -1418,6 +1418,7 @@ const estadoTransferenciaSegundoPlano = {
   archivoActual: "",
   mensajeTexto: "Sin transferencias activas.",
   iniciadoEn: null,
+  detallesErrores: [],
 };
 
 // Iniciar proceso masivo en segundo plano
@@ -1502,6 +1503,7 @@ async function iniciarTransferenciaSegundoPlano(req, res) {
     estadoTransferenciaSegundoPlano.pct = 5;
     estadoTransferenciaSegundoPlano.mensajeTexto = `Iniciando transferencia de ${archivosAProcesar.length} archivo(s)...`;
     estadoTransferenciaSegundoPlano.iniciadoEn = new Date();
+    estadoTransferenciaSegundoPlano.detallesErrores = [];
 
     // Arrancar la cola concurrente en segundo plano (3 transferencias simultáneas en paralelo sin colapso de RAM)
     setImmediate(async () => {
@@ -1547,10 +1549,15 @@ async function iniciarTransferenciaSegundoPlano(req, res) {
             };
 
             let exitoLocal = false;
+            let mensajeErrorLocal = "";
             const resSim = {
               status: () => resSim,
               json: (data) => {
-                if (data && data.ok) exitoLocal = true;
+                if (data && data.ok) {
+                  exitoLocal = true;
+                } else if (data && data.mensaje) {
+                  mensajeErrorLocal = data.mensaje;
+                }
                 return data;
               },
             };
@@ -1561,10 +1568,27 @@ async function iniciarTransferenciaSegundoPlano(req, res) {
               estadoTransferenciaSegundoPlano.exitosos++;
             } else {
               estadoTransferenciaSegundoPlano.errores++;
+              const motivo = mensajeErrorLocal || "Error durante la importación.";
+              estadoTransferenciaSegundoPlano.detallesErrores.push({
+                archivo: item.archivo,
+                notaria: item.notaria,
+                volumen: item.volumen || "SIN VOLUMEN",
+                error: motivo,
+                hora: new Date().toLocaleTimeString("es-MX"),
+              });
+              console.error(`❌ [ERROR TRANSFERENCIA] ${rutaLegible}: ${motivo}`);
             }
           } catch (errTask) {
             estadoTransferenciaSegundoPlano.errores++;
-            console.error("Error en tarea segundo plano:", errTask.message);
+            const motivo = errTask.message || "Excepción al transferir archivo.";
+            estadoTransferenciaSegundoPlano.detallesErrores.push({
+              archivo: item.archivo,
+              notaria: item.notaria,
+              volumen: item.volumen || "SIN VOLUMEN",
+              error: motivo,
+              hora: new Date().toLocaleTimeString("es-MX"),
+            });
+            console.error(`❌ [EXCEPCIÓN TRANSFERENCIA] ${rutaLegible}: ${motivo}`);
           }
 
           estadoTransferenciaSegundoPlano.procesados++;
