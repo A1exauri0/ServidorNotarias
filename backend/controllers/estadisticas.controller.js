@@ -11,7 +11,7 @@ const { exec } = require("child_process");
 let dbPool = null;
 
 // Helper para calcular la fecha fiscal de jornada y el turno en base a los horarios locales y fines de semana
-function resolverFechaYTurnoDeJornada(fechaHoraStr) {
+function resolverFechaYTurnoDeJornada(fechaHoraStr, turnoPerfil) {
   let hora = 0;
   let fechaJornada;
 
@@ -43,8 +43,9 @@ function resolverFechaYTurnoDeJornada(fechaHoraStr) {
     turno = "Vespertino";
   } else {
     turno = "Nocturno";
-    // Si la hora es de 00:00 a 05:59 AM, pertenece a la jornada del dia anterior
-    if (hora < 6) {
+    // Si la hora es de 00:00 a 05:59 AM y el turno es NOCTURNO, pertenece a la jornada que inició la noche anterior
+    const esNocturno = turnoPerfil && turnoPerfil.toUpperCase() === "NOCTURNO";
+    if (hora < 6 && esNocturno) {
       fechaJornada.setDate(fechaJornada.getDate() - 1);
     }
   }
@@ -105,8 +106,9 @@ async function obtenerProductividadGeneral(req, res) {
     const agrupadoTurnos = {};
 
     registros.forEach((r) => {
-      const { fechaStr, turno } = resolverFechaYTurnoDeJornada(r.fecha_hora);
-      const turnoFinal = turno; // Clasificación estricta por rango de horario
+      const turnoOficial = r.turno_usuario || r.turno;
+      const { fechaStr, turno } = resolverFechaYTurnoDeJornada(r.fecha_hora, turnoOficial);
+      const turnoFinal = turnoOficial || turno || "Matutino";
       const notaria = r.notaria || "General";
       const volumen = r.volumen || "Sin volumen";
       const paginas = parseInt(r.paginas || 0, 10);
@@ -174,7 +176,7 @@ async function obtenerProductividadDiaria(req, res) {
     const diaF = String(limiteFinDate.getDate()).padStart(2, "0");
     const fechaFinMas1 = `${anioF}-${mesF}-${diaF}`;
 
-    const fechaInicioCompleta = `${fecha_inicio} 06:00:00`;
+    const fechaInicioCompleta = `${fecha_inicio} 00:00:00`;
     const fechaFinCompleta = `${fechaFinMas1} 05:59:59`;
 
     const [registros] = await dbPool.query(
@@ -188,6 +190,7 @@ async function obtenerProductividadDiaria(req, res) {
             FROM \`auditoria\` a
             LEFT JOIN \`usuarios\` u ON a.usuario = u.nombre_usuario
             WHERE a.fecha_hora >= ? AND a.fecha_hora <= ?
+              AND a.usuario IS NOT NULL AND a.usuario != '' AND a.usuario != 'Desconocido'
         `,
       [fechaInicioCompleta, fechaFinCompleta],
     );
@@ -195,9 +198,11 @@ async function obtenerProductividadDiaria(req, res) {
     const agrupadoDiario = {};
 
     registros.forEach((r) => {
-      const { fechaStr, turno: turnoCalculado } = resolverFechaYTurnoDeJornada(r.fecha_hora);
-      const turnoFinal = r.turno_usuario || r.turno || turnoCalculado || "Matutino";
-      const usuario = r.usuario || "Desconocido";
+      if (!r.usuario || r.usuario === "Desconocido") return;
+      const turnoOficial = r.turno_usuario || r.turno;
+      const { fechaStr, turno: turnoCalculado } = resolverFechaYTurnoDeJornada(r.fecha_hora, turnoOficial);
+      const turnoFinal = turnoOficial || turnoCalculado || "Matutino";
+      const usuario = r.usuario;
       const paginas = parseInt(r.paginas || 0, 10);
 
       const clave = `${fechaStr}_${usuario.toUpperCase()}_${turnoFinal}`;
@@ -244,8 +249,6 @@ async function exportarExcelAuditoria(req, res) {
       });
     }
 
-    // Limitar la consulta al inicio de jornada de fecha_inicio (06:00:00) 
-    // hasta el final de jornada de fecha_fin (05:59:59 del dia siguiente)
     const limiteFinDate = new Date(fecha_fin + "T12:00:00");
     limiteFinDate.setDate(limiteFinDate.getDate() + 1);
     const anioF = limiteFinDate.getFullYear();
@@ -253,7 +256,7 @@ async function exportarExcelAuditoria(req, res) {
     const diaF = String(limiteFinDate.getDate()).padStart(2, "0");
     const fechaFinMas1 = `${anioF}-${mesF}-${diaF}`;
 
-    const fechaInicioCompleta = `${fecha_inicio} 06:00:00`;
+    const fechaInicioCompleta = `${fecha_inicio} 00:00:00`;
     const fechaFinCompleta = `${fechaFinMas1} 05:59:59`;
 
     // Consultar todos los registros en el rango de fecha/hora de jornada, uniendo con usuarios y su turno oficial
@@ -277,6 +280,7 @@ async function exportarExcelAuditoria(req, res) {
             FROM \`auditoria\` a
             LEFT JOIN \`usuarios\` u ON a.usuario = u.nombre_usuario
             WHERE a.fecha_hora >= ? AND a.fecha_hora <= ?
+              AND a.usuario IS NOT NULL AND a.usuario != '' AND a.usuario != 'Desconocido'
         `,
       [fechaInicioCompleta, fechaFinCompleta],
     );
@@ -291,8 +295,9 @@ async function exportarExcelAuditoria(req, res) {
     // 1. Agrupar por Fecha usando la lógica fiscal de turnos y fines de semana
     const registrosPorFecha = {};
     registros.forEach((reg) => {
-      const { fechaStr, turno } = resolverFechaYTurnoDeJornada(reg.fecha_hora);
-      const turnoFinal = reg.turno_usuario || reg.turno || turno || "Matutino";
+      const turnoOficial = reg.turno_usuario || reg.turno;
+      const { fechaStr, turno } = resolverFechaYTurnoDeJornada(reg.fecha_hora, turnoOficial);
+      const turnoFinal = turnoOficial || turno || "Matutino";
       reg.fecha_calculada = fechaStr;
       reg.turno_calculado = turnoFinal;
 
@@ -304,9 +309,11 @@ async function exportarExcelAuditoria(req, res) {
 
     // 2. Deduplicar registros por archivo original por cada fecha (Lógica idéntica a la app C#)
     const registrosDeduplicados = [];
-    Object.keys(registrosPorFecha).forEach((fecha) => {
+    Object.keys(registrosPorFecha).forEach((fechaStr) => {
+      const grupoFecha = registrosPorFecha[fechaStr];
       const grupoArchivos = {};
-      registrosPorFecha[fecha].forEach((reg) => {
+
+      grupoFecha.forEach((reg) => {
         const nombreArchivo = (reg.archivo || "Desconocido").toLowerCase();
         if (!grupoArchivos[nombreArchivo]) {
           grupoArchivos[nombreArchivo] = [];
@@ -361,7 +368,7 @@ async function exportarExcelAuditoria(req, res) {
         const fecha = reg.fecha_calculada;
         if (fecha < fecha_inicio || fecha > fecha_fin) return;
 
-        const nombreKey = reg.nombre_completo.toUpperCase();
+        const nombreKey = (reg.nombre_completo || reg.usuario || "DESCONOCIDO").toUpperCase();
         // Dar prioridad al turno oficial de la tabla de usuarios
         const turnoOficial = (reg.turno_usuario || reg.turno || reg.turno_calculado || "Matutino").toUpperCase();
 
