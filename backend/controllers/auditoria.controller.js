@@ -9,6 +9,33 @@ const { PDFDocument } = require("pdf-lib");
 
 let dbPool = null;
 
+// Helper seguro para crear carpetas sin fallar en rutas de red UNC de Windows (\\servidor\recurso)
+async function asegurarDirectorio(targetPath) {
+  if (!targetPath) return;
+  if (fs.existsSync(targetPath)) return;
+
+  const esUnc = targetPath.startsWith("\\\\") || targetPath.startsWith("//");
+  if (esUnc) {
+    const partes = targetPath.replace(/\//g, "\\").split("\\").filter(Boolean);
+    if (partes.length >= 2) {
+      let acumulado = `\\\\${partes[0]}\\${partes[1]}`;
+      for (let i = 2; i < partes.length; i++) {
+        acumulado = path.join(acumulado, partes[i]);
+        if (!fs.existsSync(acumulado)) {
+          try {
+            await fs.promises.mkdir(acumulado);
+          } catch (err) {
+            if (err.code !== "EEXIST" && !fs.existsSync(acumulado)) throw err;
+          }
+        }
+      }
+      return;
+    }
+  }
+
+  await fs.promises.mkdir(targetPath, { recursive: true });
+}
+
 // Inicializa el pool de base de datos desde server.js
 function inicializarPool(pool) {
   dbPool = pool;
@@ -213,10 +240,8 @@ async function subirPdf(req, res) {
     const carpetaDestinoFinal = path.join(baseDestino, subcarpeta);
     const rutaDestinoArchivo = path.join(carpetaDestinoFinal, archivoOriginal);
 
-    // Asegurar que el directorio de destino exista de forma asíncrona
-    if (!fs.existsSync(carpetaDestinoFinal)) {
-      await fs.promises.mkdir(carpetaDestinoFinal, { recursive: true });
-    }
+    // Asegurar que el directorio de destino exista de forma asíncrona y segura en red UNC
+    await asegurarDirectorio(carpetaDestinoFinal);
 
     // Copiar de forma asíncrona para liberar por completo el Event Loop de Node.js
     if (rutaCompletaTemporal !== rutaDestinoArchivo) {
@@ -653,9 +678,7 @@ async function importarArchivoPdf(req, res) {
       const carpetaDestinoFinal = path.join(baseDestino, subcarpeta);
       const rutaDestinoArchivo = path.join(carpetaDestinoFinal, archivo);
 
-      if (!fs.existsSync(carpetaDestinoFinal)) {
-        await fs.promises.mkdir(carpetaDestinoFinal, { recursive: true });
-      }
+      await asegurarDirectorio(carpetaDestinoFinal);
       if (rutaCompleta !== rutaDestinoArchivo) {
         await fs.promises.copyFile(rutaCompleta, rutaDestinoArchivo);
       }

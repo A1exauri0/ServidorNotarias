@@ -10,6 +10,33 @@ const path = require("path");
 const fs = require("fs");
 const controladorAuditoria = require("../controllers/auditoria.controller");
 
+// Helper seguro para crear carpetas sin fallar en rutas de red UNC de Windows (\\servidor\recurso)
+function asegurarDirectorioSync(targetPath) {
+  if (!targetPath) return;
+  if (fs.existsSync(targetPath)) return;
+
+  const esUnc = targetPath.startsWith("\\\\") || targetPath.startsWith("//");
+  if (esUnc) {
+    const partes = targetPath.replace(/\//g, "\\").split("\\").filter(Boolean);
+    if (partes.length >= 2) {
+      let acumulado = `\\\\${partes[0]}\\${partes[1]}`;
+      for (let i = 2; i < partes.length; i++) {
+        acumulado = path.join(acumulado, partes[i]);
+        if (!fs.existsSync(acumulado)) {
+          try {
+            fs.mkdirSync(acumulado);
+          } catch (err) {
+            if (err.code !== "EEXIST" && !fs.existsSync(acumulado)) throw err;
+          }
+        }
+      }
+      return;
+    }
+  }
+
+  fs.mkdirSync(targetPath, { recursive: true });
+}
+
 // Configuración de almacenamiento físico de PDFs con multer
 const almacenamiento = multer.diskStorage({
   destination: (req, archivo, callback) => {
@@ -29,10 +56,8 @@ const almacenamiento = multer.diskStorage({
     const rutaBase = process.env.RUTA_SSDIREC || "\\\\172.40.5.84\\ssdirec";
     const rutaDestino = path.join(rutaBase, tipoCaptura, notaria);
 
-    // Crear la carpeta física si no existe
-    if (!fs.existsSync(rutaDestino)) {
-      fs.mkdirSync(rutaDestino, { recursive: true });
-    }
+    // Crear la carpeta física si no existe de forma segura para rutas UNC de red
+    asegurarDirectorioSync(rutaDestino);
 
     callback(null, rutaDestino);
   },
