@@ -521,9 +521,9 @@ async function escanearDirectorio(req, res) {
   }
 }
 
-// Envía el PDF físico directamente consumiendo el endpoint de la API central de Astronmx / Stellum sin saturar la memoria RAM
+// Envía el PDF físico directamente consumiendo la API oficial de Astronmx sin saturar la memoria RAM
 async function enviarPdfAEndpointAstronmx(rutaCompleta, archivo, tipoCaptura, notariaConVolumen) {
-  const urlEndpoint = process.env.URL_ASTRONMX_SUBIR || "https://app.astronmx.cloud/api/digitalizacion/subir-pdf";
+  const urlEndpoint = "https://app.astronmx.cloud/api/digitalizacion/subir-pdf";
 
   let blob;
   if (typeof fs.openAsBlob === "function") {
@@ -542,11 +542,12 @@ async function enviarPdfAEndpointAstronmx(rutaCompleta, archivo, tipoCaptura, no
   const respuesta = await fetch(urlEndpoint, {
     method: "POST",
     body: formData,
+    signal: AbortSignal.timeout(30000), // Timeout de 30 segundos
   });
 
   if (!respuesta.ok) {
     const errorTexto = await respuesta.text();
-    throw new Error(`El endpoint de Astronmx respondió con código ${respuesta.status}: ${errorTexto}`);
+    throw new Error(`El endpoint oficial de Astronmx respondió con código ${respuesta.status}: ${errorTexto}`);
   }
 
   return await respuesta.json();
@@ -1198,11 +1199,27 @@ async function migrarHistorico(req, res) {
 // Asigna masivamente un usuario a una lista de registros de auditoria por sus IDs o por notaría/volúmenes
 async function asignarPdfs(req, res) {
   try {
-    const { ids, usuario, notaria, volumenes } = req.body;
+    const { ids, usuario, notaria, volumenes, itemsVolumenes } = req.body;
     if (!usuario) {
       return res.status(400).json({
         ok: false,
         mensaje: "Debe proporcionar el usuario a asignar.",
+      });
+    }
+
+    // 1. Asignar arreglo de pares { notaria, volumen } seleccionados en el árbol
+    if (itemsVolumenes && Array.isArray(itemsVolumenes) && itemsVolumenes.length > 0) {
+      let totalAfectados = 0;
+      for (const item of itemsVolumenes) {
+        const [resVol] = await dbPool.query(
+          "UPDATE `auditoria` SET usuario = ?, updated_at = NOW() WHERE notaria = ? AND (volumen = ? OR (volumen IS NULL AND ? = 'SIN VOLUMEN'))",
+          [usuario, item.notaria, item.volumen, item.volumen]
+        );
+        totalAfectados += resVol.affectedRows;
+      }
+      return res.json({
+        ok: true,
+        mensaje: `Se asignaron los ${itemsVolumenes.length} volumen(es) (${totalAfectados} archivos) al capturista "${usuario}" correctamente.`,
       });
     }
 
@@ -1247,6 +1264,49 @@ async function asignarPdfs(req, res) {
     res.status(500).json({
       ok: false,
       mensaje: "Error al asignar PDFs a usuario: " + error.message,
+    });
+  }
+}
+
+// Obtiene únicamente las notarías y carpetas de volúmenes que tienen archivos SIN ASIGNAR
+async function obtenerVolumenesPendientesAsignacion(req, res) {
+  try {
+    const sql = `
+      SELECT 
+        notaria, 
+        COALESCE(volumen, 'SIN VOLUMEN') AS volumen, 
+        COUNT(*) AS pendientes
+      FROM \`auditoria\`
+      WHERE (usuario IS NULL OR usuario = '' OR usuario = 'Administrador' OR usuario = 'Desconocido')
+      GROUP BY notaria, volumen
+      HAVING pendientes > 0
+      ORDER BY notaria ASC, volumen ASC
+    `;
+    const [rows] = await dbPool.query(sql);
+
+    const mapaNotarias = {};
+    rows.forEach((r) => {
+      const nombreNotaria = r.notaria || "General";
+      if (!mapaNotarias[nombreNotaria]) {
+        mapaNotarias[nombreNotaria] = {
+          nombre: nombreNotaria,
+          totalPendientes: 0,
+          volumenes: [],
+        };
+      }
+      mapaNotarias[nombreNotaria].totalPendientes += r.pendientes;
+      mapaNotarias[nombreNotaria].volumenes.push({
+        nombre: r.volumen,
+        pendientes: r.pendientes,
+      });
+    });
+
+    const notarias = Object.values(mapaNotarias);
+    res.json({ ok: true, notarias });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      mensaje: "Error al obtener volúmenes pendientes: " + error.message,
     });
   }
 }
@@ -1564,6 +1624,7 @@ module.exports = {
   migrarHistorico,
   asignarPdfs,
   obtenerPdfsParaAsignar,
+  obtenerVolumenesPendientesAsignacion,
   obtenerPdfsLoteDirecto,
   iniciarTransferenciaSegundoPlano,
   obtenerEstadoTransferenciaSegundoPlano,

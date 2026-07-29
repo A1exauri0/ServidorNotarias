@@ -15,18 +15,18 @@ async function inicializarVistaAsignacion() {
   vincularEventosAsignacion();
 }
 
-// Carga las notarías y usuarios y renderiza el árbol explorador de carpetas
+// Carga las notarías y usuarios que TIENEN archivos pendientes sin asignar y renderiza el árbol explorador
 async function cargarNotariasYUsuarios() {
-  // 1. Cargar Notarías
+  // 1. Cargar Volúmenes y Notarías Pendientes de Asignar
   try {
-    const resNot = await fetch("http://localhost:3000/api/notarias-locales");
+    const resNot = await fetch("http://localhost:3000/api/volumenes-pendientes");
     const datNot = await resNot.json();
     if (datNot.ok && datNot.notarias) {
       listaNotariasGlobal = datNot.notarias;
       renderizarArbolExploradorAsignacion();
     }
   } catch (e) {
-    console.error("Error al cargar notarías para asignación:", e);
+    console.error("Error al cargar volúmenes pendientes para asignación:", e);
   }
 
   // 2. Cargar Usuarios Capturistas
@@ -109,17 +109,41 @@ function poblarCustomSelectUsuarios() {
     });
   }
 
-  if (optionsDestino) {
-    optionsDestino.innerHTML = `<div class="custom-select-option seleccionado" data-valor="">-- Seleccionar Capturista --</div>`;
+  const listaDestinoDiv = document.getElementById("listaOpcionesCapturistaDestino") || optionsDestino;
+  if (listaDestinoDiv) {
+    listaDestinoDiv.innerHTML = `<div class="custom-select-option seleccionado" data-valor="">-- Seleccionar Capturista --</div>`;
     listaUsuariosGlobal.forEach((u) => {
       const nombreMostrar = u.nombre_completo || u.nombre_usuario || "Usuario Desconocido";
       const usuarioValor = u.nombre_usuario || u.nombre_completo;
-      optionsDestino.innerHTML += `<div class="custom-select-option" data-valor="${usuarioValor}">${nombreMostrar} (${usuarioValor})</div>`;
+      const esAdmin = /admin/i.test(usuarioValor) || /admin/i.test(nombreMostrar) || (u.rol && /admin/i.test(u.rol));
+
+      // Excluir administradores del dropdown de asignación a capturista
+      if (!esAdmin) {
+        listaDestinoDiv.innerHTML += `<div class="custom-select-option" data-valor="${usuarioValor}">${nombreMostrar} (${usuarioValor})</div>`;
+      }
     });
+
+    // Registrar evento de búsqueda en tiempo real
+    const inputBuscar = document.getElementById("inputBuscarCapturista");
+    if (inputBuscar && !inputBuscar.dataset.listener) {
+      inputBuscar.dataset.listener = "true";
+      inputBuscar.addEventListener("input", (e) => {
+        const termino = e.target.value.toLowerCase().trim();
+        const opciones = listaDestinoDiv.querySelectorAll(".custom-select-option");
+        opciones.forEach((opt) => {
+          const texto = opt.textContent.toLowerCase();
+          if (texto.includes(termino) || opt.getAttribute("data-valor") === "") {
+            opt.style.display = "block";
+          } else {
+            opt.style.display = "none";
+          }
+        });
+      });
+    }
   }
 }
 
-// Dibuja el Árbol Explorador de Notarías y Volúmenes con Checkboxes
+// Dibuja el Árbol Explorador mostrando ÚNICAMENTE Notarías y Volúmenes que tienen archivos SIN ASIGNAR
 function renderizarArbolExploradorAsignacion() {
   const contenedor = document.getElementById("exploradorArbolAsignacion");
   if (!contenedor) return;
@@ -127,7 +151,13 @@ function renderizarArbolExploradorAsignacion() {
   contenedor.innerHTML = "";
 
   if (listaNotariasGlobal.length === 0) {
-    contenedor.innerHTML = `<div style="text-align: center; color: var(--color-texto-secundario); padding: 20px;">No se encontraron notarías.</div>`;
+    contenedor.innerHTML = `
+      <div style="text-align: center; color: #2ebd75; padding: 30px 15px;">
+        <iconify-icon icon="mdi:check-circle-outline" style="font-size: 36px; margin-bottom: 8px;"></iconify-icon>
+        <p style="margin: 0; font-weight: 600; font-size: 13.5px;">¡Excelente!</p>
+        <p style="margin: 4px 0 0 0; font-size: 12px; color: var(--color-texto-secundario);">Todos los volúmenes digitalizados están asignados a capturistas.</p>
+      </div>
+    `;
     return;
   }
 
@@ -150,7 +180,10 @@ function renderizarArbolExploradorAsignacion() {
       ${iconoFlecha}
       <input type="checkbox" class="chk-notaria-asig" data-notaria="${notaria.nombre}" data-notaria-id="${notariaIdSeguro}" style="cursor: pointer; margin-right: 4px;">
       <iconify-icon icon="mdi:folder" style="color: #4a90e2; font-size: 17px; vertical-align: middle; margin-right: 4px;"></iconify-icon>
-      <span style="font-weight: 600; color: var(--color-texto);">${notaria.nombre}</span>
+      <span style="font-weight: 600; color: var(--color-texto); flex: 1;">${notaria.nombre}</span>
+      <span style="font-size: 11px; font-weight: 700; background: rgba(58, 106, 201, 0.12); color: #3a6ac9; padding: 2px 8px; border-radius: 10px; margin-left: 6px;">
+        ${notaria.totalPendientes} sin asignar
+      </span>
     `;
 
     nodoNotaria.appendChild(cabecera);
@@ -161,17 +194,26 @@ function renderizarArbolExploradorAsignacion() {
       listaVolumenes.className = "lista-volumenes-asig";
       listaVolumenes.id = `lista_volumenes_asig_${notariaIdSeguro}`;
 
-      notaria.volumenes.forEach((vol) => {
+      notaria.volumenes.forEach((volObj) => {
+        const nombreVol = typeof volObj === "object" ? volObj.nombre : volObj;
+        const cantPendientes = typeof volObj === "object" ? volObj.pendientes : 0;
+
         const nodoVolumen = document.createElement("div");
         nodoVolumen.className = "nodo-volumen-asig";
 
         const cabeceraVol = document.createElement("div");
         cabeceraVol.className = "cabecera-volumen-asig";
+        cabeceraVol.style.justifyContent = "space-between";
         cabeceraVol.innerHTML = `
-          <span style="display: inline-block; width: 14px;"></span>
-          <input type="checkbox" class="chk-volumen-asig" data-notaria="${notaria.nombre}" data-volumen="${vol}" style="cursor: pointer; margin-right: 4px;">
-          <iconify-icon icon="mdi:folder-outline" style="color: #f5a623; font-size: 16px; vertical-align: middle; margin-right: 4px;"></iconify-icon>
-          <span style="color: var(--color-texto-secundario); font-weight: 500;">${vol}</span>
+          <div style="display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            <span style="display: inline-block; width: 14px;"></span>
+            <input type="checkbox" class="chk-volumen-asig" data-notaria="${notaria.nombre}" data-volumen="${nombreVol}" style="cursor: pointer; margin-right: 4px;">
+            <iconify-icon icon="mdi:folder-outline" style="color: #f5a623; font-size: 16px; vertical-align: middle; margin-right: 4px;"></iconify-icon>
+            <span style="color: var(--color-texto); font-weight: 500;">${nombreVol}</span>
+          </div>
+          <span style="font-size: 10.5px; font-weight: 600; background: rgba(245, 166, 35, 0.15); color: #d9822b; padding: 1px 7px; border-radius: 8px;">
+            ${cantPendientes} PDFs
+          </span>
         `;
 
         // Evento al dar clic en la carpeta de volumen: consultar su contenido en la tabla derecha
@@ -181,7 +223,7 @@ function renderizarArbolExploradorAsignacion() {
           cabeceraVol.classList.add("seleccionado");
 
           notariaFiltroActiva = notaria.nombre;
-          volumenFiltroActivo = vol;
+          volumenFiltroActivo = nombreVol;
           consultarPdfsAsignacion();
         });
 
@@ -363,6 +405,37 @@ async function consultarPdfsAsignacion() {
   }
 }
 
+// Muestra el Modal de Confirmación de Asignación de forma asíncrona (Estilo nativo modal-superpuesto)
+function mostrarModalConfirmacionAsignacion(mensajeText) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("modalConfirmarAsignacion");
+    const txt = document.getElementById("txtMensajeModalAsignacion");
+    const btnConf = document.getElementById("btnConfirmarModalAsignacion");
+    const btnCanc = document.getElementById("btnCancelarModalAsignacion");
+    const btnCerrarX = document.getElementById("btnCerrarModalAsignacion");
+
+    if (!modal || !btnConf || !btnCanc) {
+      resolve(confirm(mensajeText.replace(/<[^>]*>/g, "")));
+      return;
+    }
+
+    if (txt) txt.innerHTML = mensajeText;
+    modal.style.display = "flex";
+
+    const cerrarModal = (resultado) => {
+      modal.style.display = "none";
+      btnConf.onclick = null;
+      btnCanc.onclick = null;
+      if (btnCerrarX) btnCerrarX.onclick = null;
+      resolve(resultado);
+    };
+
+    btnConf.onclick = () => cerrarModal(true);
+    btnCanc.onclick = () => cerrarModal(false);
+    if (btnCerrarX) btnCerrarX.onclick = () => cerrarModal(false);
+  });
+}
+
 // Ejecuta la asignación masiva de volúmenes o PDFs individuales al capturista seleccionado
 async function ejecutarAsignacionMasiva() {
   const btnDestino = document.getElementById("btnUsuarioDestino");
@@ -378,29 +451,26 @@ async function ejecutarAsignacionMasiva() {
   const checksNotarias = document.querySelectorAll(".chk-notaria-asig:checked");
 
   let payload = { usuario: usuarioDestino };
+  let descripcionAsignacion = "";
 
   // 1. Si hay PDFs específicos seleccionados por checkbox en la tabla
   if (checksPdfs.length > 0) {
     payload.ids = Array.from(checksPdfs).map((chk) => parseInt(chk.dataset.id, 10));
+    descripcionAsignacion = `¿Deseas asignar los <strong>${payload.ids.length} archivos PDF</strong> seleccionados al capturista <strong>"${usuarioDestino}"</strong>?`;
   } 
   // 2. Si se marcaron carpetas de Volúmenes en el árbol explorador
   else if (checksVolumenes.length > 0) {
-    const notariasSet = new Set();
-    const volumenesArr = [];
-
-    checksVolumenes.forEach((chk) => {
-      notariasSet.add(chk.dataset.notaria);
-      volumenesArr.push(chk.dataset.volumen);
-    });
-
-    const notariaUnica = Array.from(notariasSet)[0];
-    payload.notaria = notariaUnica;
-    payload.volumenes = volumenesArr;
+    payload.itemsVolumenes = Array.from(checksVolumenes).map((chk) => ({
+      notaria: chk.dataset.notaria,
+      volumen: chk.dataset.volumen,
+    }));
+    descripcionAsignacion = `¿Deseas asignar los <strong>${payload.itemsVolumenes.length} volumen(es)</strong> seleccionados al capturista <strong>"${usuarioDestino}"</strong>?`;
   }
   // 3. Si se marcó una Notaría completa en el árbol explorador
   else if (checksNotarias.length > 0) {
     const firstNotaria = checksNotarias[0].dataset.notaria;
     payload.notaria = firstNotaria;
+    descripcionAsignacion = `¿Deseas asignar todos los volúmenes de la <strong>"${firstNotaria}"</strong> al capturista <strong>"${usuarioDestino}"</strong>?`;
   }
   // 4. Fallback: si hay registros mostrados en el filtro actual
   else {
@@ -409,10 +479,13 @@ async function ejecutarAsignacionMasiva() {
       alert("Selecciona carpetas de volúmenes en el árbol o PDFs en la tabla para asignar.");
       return;
     }
-    const desSelec = confirm(`¿Deseas asignar los ${todosChecks.length} PDFs mostrados actualmente al capturista seleccionado?`);
-    if (!desSelec) return;
     payload.ids = Array.from(todosChecks).map((chk) => parseInt(chk.dataset.id, 10));
+    descripcionAsignacion = `¿Deseas asignar los <strong>${payload.ids.length} PDFs</strong> mostrados actualmente al capturista <strong>"${usuarioDestino}"</strong>?`;
   }
+
+  // Confirmar mediante Modal Modal de Interfaz Premium
+  const confirmado = await mostrarModalConfirmacionAsignacion(descripcionAsignacion);
+  if (!confirmado) return;
 
   const btnAsignar = document.getElementById("btnEjecutarAsignacion");
   if (btnAsignar) btnAsignar.disabled = true;
@@ -428,6 +501,9 @@ async function ejecutarAsignacionMasiva() {
 
     if (datos.ok) {
       alert(`✔ ${datos.mensaje}`);
+      notariaFiltroActiva = "";
+      volumenFiltroActivo = "";
+      await cargarNotariasYUsuarios();
       await consultarPdfsAsignacion();
     } else {
       alert(`❌ ${datos.mensaje}`);

@@ -69,6 +69,10 @@ router.get(
   "/pendientes-asignacion",
   controladorAuditoria.obtenerPdfsParaAsignar,
 );
+router.get(
+  "/volumenes-pendientes",
+  controladorAuditoria.obtenerVolumenesPendientesAsignacion,
+);
 router.post("/obtener-pdfs-lote", controladorAuditoria.obtenerPdfsLoteDirecto);
 router.post(
   "/iniciar-transferencia-lote",

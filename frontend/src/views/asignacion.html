@@ -5,9 +5,9 @@
     <div class="tabla-contenedor" style="margin-bottom: 20px;">
         <div class="tabla-cabecera" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
             <div>
-                <h3>Asignación de PDFs y Volúmenes a Capturistas</h3>
+                <h3>Asignación de Volúmenes a Capturistas</h3>
                 <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--color-texto-secundario);">
-                    Selecciona notarías, volúmenes o documentos individuales del árbol explorador y asígnalos a los usuarios capturistas.
+                    Selecciona las carpetas de volúmenes que contienen archivos sin asignar y asígnalas a los capturistas.
                 </p>
             </div>
 
@@ -15,11 +15,19 @@
             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                 <span style="font-size: 13px; font-weight: 600; color: var(--color-texto);">Asignar a Capturista:</span>
                 
-                <!-- Dropdown Custom Usuario Destino -->
-                <div class="custom-select-wrapper" id="wrapperUsuarioDestino" style="min-width: 240px;">
+                <!-- Dropdown Custom Usuario Destino con Buscador -->
+                <div class="custom-select-wrapper" id="wrapperUsuarioDestino" style="min-width: 260px;">
                     <button class="custom-select-btn" id="btnUsuarioDestino" data-valor="">-- Seleccionar Capturista --</button>
-                    <div class="custom-select-options" id="optionsUsuarioDestino">
-                        <div class="custom-select-option seleccionado" data-valor="">-- Seleccionar Capturista --</div>
+                    <div class="custom-select-options" id="optionsUsuarioDestino" style="max-height: 280px; overflow-y: auto;">
+                        <div style="padding: 8px 10px; border-bottom: 1px solid var(--color-tarjeta-borde); position: sticky; top: 0; background: var(--color-tarjeta); z-index: 2;" onclick="event.stopPropagation();">
+                            <div style="display: flex; align-items: center; gap: 6px; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--color-tarjeta-borde);">
+                                <iconify-icon icon="mdi:magnify" style="color: var(--color-texto-secundario); font-size: 16px;"></iconify-icon>
+                                <input type="text" id="inputBuscarCapturista" placeholder="Buscar capturista..." style="background: transparent; border: none; outline: none; color: var(--color-texto); font-size: 12px; width: 100%;">
+                            </div>
+                        </div>
+                        <div id="listaOpcionesCapturistaDestino">
+                            <div class="custom-select-option seleccionado" data-valor="">-- Seleccionar Capturista --</div>
+                        </div>
                     </div>
                 </div>
 
@@ -37,8 +45,8 @@
         <div class="tarjeta-panel" style="padding: 18px; border-radius: 14px; border: 1px solid var(--color-tarjeta-borde); background-color: var(--color-tarjeta-bg);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <h4 style="margin: 0; font-size: 13px; color: var(--color-texto-secundario); text-transform: uppercase; letter-spacing: 0.8px; display: flex; align-items: center; gap: 6px;">
-                    <iconify-icon icon="mdi:folder-tree" style="font-size: 18px; color: #3a6ac9;"></iconify-icon>
-                    <span>Carpetas y Volúmenes</span>
+                    <iconify-icon icon="mdi:folder-alert" style="font-size: 18px; color: #f5a623;"></iconify-icon>
+                    <span>Volúmenes Sin Asignar</span>
                 </h4>
             </div>
 
@@ -146,5 +154,34 @@
             </div>
         </div>
 
+    </div>
+</div>
+
+<!-- Modal de Confirmación de Asignación (Estilo nativo modal-superpuesto) -->
+<div id="modalConfirmarAsignacion" class="modal-superpuesto" style="display: none;">
+    <div class="modal-contenido" style="width: 420px;">
+        <div class="modal-cabecera">
+            <h3 style="display: flex; align-items: center; gap: 8px;">
+                <iconify-icon icon="mdi:account-check-outline" style="color: #2ebd75; font-size: 22px;"></iconify-icon>
+                <span>Confirmar Asignación</span>
+            </h3>
+            <button type="button" id="btnCerrarModalAsignacion" class="btn-icono-top">
+                <iconify-icon icon="mdi:close"></iconify-icon>
+            </button>
+        </div>
+        <div class="modal-cuerpo" style="padding-top: 15px;">
+            <p id="txtMensajeModalAsignacion" style="margin: 0 0 20px 0; font-size: 14px; color: var(--color-texto); line-height: 1.5;">
+                ¿Estás seguro de que deseas realizar esta asignación?
+            </p>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" id="btnCancelarModalAsignacion" class="btn-filtrar" style="background: transparent; border: 1px solid var(--color-tarjeta-borde); color: var(--color-texto); font-weight: 600; cursor: pointer; height: 38px;">
+                    Cancelar
+                </button>
+                <button type="button" id="btnConfirmarModalAsignacion" class="btn-filtrar" style="background-color: #2ebd75; border-color: #2ebd75; color: white; font-weight: 600; cursor: pointer; height: 38px;">
+                    <iconify-icon icon="mdi:check" style="vertical-align: middle; margin-right: 4px;"></iconify-icon>Sí, Asignar
+                </button>
+            </div>
+        </div>
     </div>
 </div>
