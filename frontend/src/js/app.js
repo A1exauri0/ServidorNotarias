@@ -870,31 +870,61 @@ function renderizarGraficaTurnos(datosTurnos) {
   });
 }
 
-// Carga la lista de registros en tiempo real desde la API
-async function cargarTablaRegistros(forzarFiltroFecha = false) {
+let paginaActualRegistros = 1;
+let totalPaginasRegistros = 1;
+let totalRegistrosGeneral = 0;
+let debounceTimerBuscador = null;
+
+// Carga la lista de registros en tiempo real desde la API con paginación de 100 en 100 y búsqueda en toda la BD
+async function cargarTablaRegistros(resetPagina = false) {
   try {
-    let url = "http://localhost:3000/api/registros";
-    if (forzarFiltroFecha) {
-      const fechaInicio = document.getElementById("fechaInicio")?.value;
-      const fechaFin = document.getElementById("fechaFin")?.value;
-      if (fechaInicio && fechaFin) {
-        url += `?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`;
-      }
+    if (resetPagina) {
+      paginaActualRegistros = 1;
     }
 
+    const buscador = document.getElementById("buscadorRegistros");
+    const termino = buscador ? buscador.value.trim() : "";
+
+    const btnUsuario = document.getElementById("btnFiltroUsuario");
+    const btnNotaria = document.getElementById("btnFiltroNotaria");
+    const btnVolumen = document.getElementById("btnFiltroVolumen");
+
+    const usuarioVal = btnUsuario ? btnUsuario.getAttribute("data-valor") || "" : "";
+    const notariaVal = btnNotaria ? btnNotaria.getAttribute("data-valor") || "" : "";
+    const volumenVal = btnVolumen ? btnVolumen.getAttribute("data-valor") || "" : "";
+
+    const params = new URLSearchParams();
+    params.append("page", paginaActualRegistros);
+    params.append("limit", 100);
+
+    if (termino) params.append("buscar", termino);
+    if (usuarioVal) params.append("usuario", usuarioVal);
+    if (notariaVal) params.append("notaria", notariaVal);
+    if (volumenVal) params.append("volumen", volumenVal);
+
+    const fechaInicio = document.getElementById("fechaInicio")?.value;
+    const fechaFin = document.getElementById("fechaFin")?.value;
+    if (fechaInicio && fechaFin) {
+      params.append("fecha_inicio", fechaInicio);
+      params.append("fecha_fin", fechaFin);
+    }
+
+    const url = `http://localhost:3000/api/registros?${params.toString()}`;
     const respuesta = await fetch(url);
     const datos = await respuesta.json();
 
     if (datos.ok) {
       listaRegistrosLocal = datos.registros || [];
+      totalRegistrosGeneral = datos.total || listaRegistrosLocal.length;
+      paginaActualRegistros = datos.page || 1;
+      totalPaginasRegistros = datos.totalPages || 1;
 
-      // Poblar dinámicamente los dropdowns con valores únicos
-      poblarDropdownsFiltro();
+      // Actualizar la interfaz de paginación y renderizar
+      actualizarInterfazPaginacion();
+      renderizarTablaRegistros();
 
-      // Renderizar la tabla limpia
-      const buscador = document.getElementById("buscadorRegistros");
-      const termino = buscador ? buscador.value.toLowerCase().trim() : "";
-      filtrarYRenderizarTabla(termino);
+      // Conectar eventos del buscador y paginador
+      conectarEventosRegistros();
     } else {
       console.error("Error al obtener registros:", datos.mensaje);
     }
@@ -903,153 +933,163 @@ async function cargarTablaRegistros(forzarFiltroFecha = false) {
   }
 }
 
-// Configura y pobla de manera interactiva un custom select
-function configurarCustomDropdown(idDropdown, listaValores, textoPorDefecto) {
-  const wrapper = document.getElementById(`wrapperFiltro${idDropdown}`);
-  const btn = document.getElementById(`btnFiltro${idDropdown}`);
-  const optionsDiv = document.getElementById(`optionsFiltro${idDropdown}`);
-  if (!wrapper || !btn || !optionsDiv) return;
+// Renderiza los controles de paginación
+function actualizarInterfazPaginacion() {
+  const lblTitulo = document.getElementById("txtTituloRegistros");
+  const infoTotal = document.getElementById("infoPaginacionTotal");
+  const txtPagina = document.getElementById("txtNumeroPagina");
+  const btnAnt = document.getElementById("btnPaginaAnterior");
+  const btnSig = document.getElementById("btnPaginaSiguiente");
 
-  const valorActual = btn.getAttribute("data-valor") || "";
+  if (lblTitulo) {
+    lblTitulo.textContent = `Registros de Auditoría (${totalRegistrosGeneral.toLocaleString()} totales)`;
+  }
 
-  // Renderizar las opciones
-  optionsDiv.innerHTML = `<div class="custom-select-option ${valorActual === "" ? "seleccionado" : ""}" data-valor="">${textoPorDefecto}</div>`;
-  listaValores.forEach((val) => {
-    optionsDiv.innerHTML += `<div class="custom-select-option ${valorActual === val ? "seleccionado" : ""}" data-valor="${val}">${val}</div>`;
-  });
+  if (infoTotal) {
+    const inicio = totalRegistrosGeneral === 0 ? 0 : (paginaActualRegistros - 1) * 100 + 1;
+    const fin = Math.min(paginaActualRegistros * 100, totalRegistrosGeneral);
+    infoTotal.textContent = `Mostrando ${inicio.toLocaleString()} - ${fin.toLocaleString()} de ${totalRegistrosGeneral.toLocaleString()} registros`;
+  }
 
-  // Manejar el clic en el botón para abrir/cerrar
-  if (!btn.dataset.listener) {
-    btn.dataset.listener = "true";
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      document.querySelectorAll(".custom-select-wrapper").forEach((w) => {
-        if (w !== wrapper) w.classList.remove("activo");
-      });
-      wrapper.classList.toggle("activo");
+  if (txtPagina) {
+    txtPagina.textContent = `Página ${paginaActualRegistros} de ${totalPaginasRegistros}`;
+  }
+
+  if (btnAnt) {
+    btnAnt.disabled = paginaActualRegistros <= 1;
+  }
+
+  if (btnSig) {
+    btnSig.disabled = paginaActualRegistros >= totalPaginasRegistros;
+  }
+}
+
+let registroAEliminarId = null;
+
+// Conecta los eventos de paginación, búsqueda global y modal de eliminación
+function conectarEventosRegistros() {
+  const btnAnt = document.getElementById("btnPaginaAnterior");
+  const btnSig = document.getElementById("btnPaginaSiguiente");
+  const buscador = document.getElementById("buscadorRegistros");
+  const tbody = document.getElementById("tablaRegistrosBody");
+
+  const modalEliminar = document.getElementById("modalConfirmarEliminarRegistro");
+  const btnCerrarX = document.getElementById("btnCerrarModalEliminarRegX");
+  const btnCancelar = document.getElementById("btnCancelarEliminarReg");
+  const btnConfirmar = document.getElementById("btnConfirmarEliminarReg");
+  const txtNombreArch = document.getElementById("txtNombreArchivoEliminar");
+
+  const cerrarModalEliminar = () => {
+    if (modalEliminar) {
+      modalEliminar.style.display = "none";
+      modalEliminar.classList.remove("activo");
+    }
+    registroAEliminarId = null;
+  };
+
+  if (btnCerrarX && !btnCerrarX.dataset.listener) {
+    btnCerrarX.dataset.listener = "true";
+    btnCerrarX.addEventListener("click", cerrarModalEliminar);
+  }
+
+  if (btnCancelar && !btnCancelar.dataset.listener) {
+    btnCancelar.dataset.listener = "true";
+    btnCancelar.addEventListener("click", cerrarModalEliminar);
+  }
+
+  if (btnConfirmar && !btnConfirmar.dataset.listener) {
+    btnConfirmar.dataset.listener = "true";
+    btnConfirmar.addEventListener("click", async () => {
+      if (!registroAEliminarId) return;
+
+      try {
+        btnConfirmar.disabled = true;
+        btnConfirmar.innerHTML = `<iconify-icon icon="mdi:loading" class="spin"></iconify-icon> Eliminando...`;
+
+        const resp = await fetch(`http://localhost:3000/api/registros/${registroAEliminarId}`, {
+          method: "DELETE",
+        });
+        const resJson = await resp.json();
+
+        if (resJson.ok) {
+          cerrarModalEliminar();
+          cargarTablaRegistros(false);
+        } else {
+          alert("No se pudo eliminar el registro: " + (resJson.mensaje || "Error desconocido."));
+        }
+      } catch (err) {
+        alert("Error de conexión al eliminar el registro.");
+      } finally {
+        btnConfirmar.disabled = false;
+        btnConfirmar.textContent = "Eliminar";
+      }
+    });
+  }
+
+  if (tbody && !tbody.dataset.listener) {
+    tbody.dataset.listener = "true";
+    tbody.addEventListener("click", (e) => {
+      const btnEliminar = e.target.closest(".btn-eliminar-registro");
+      if (!btnEliminar) return;
+
+      const id = btnEliminar.getAttribute("data-id");
+      const archivo = btnEliminar.getAttribute("data-archivo");
+
+      registroAEliminarId = id;
+      if (txtNombreArch) txtNombreArch.textContent = archivo || "Archivo sin nombre";
+      if (modalEliminar) {
+        modalEliminar.style.display = "flex";
+        modalEliminar.classList.add("activo");
+      }
+    });
+  }
+
+  if (btnAnt && !btnAnt.dataset.listener) {
+    btnAnt.dataset.listener = "true";
+    btnAnt.addEventListener("click", () => {
+      if (paginaActualRegistros > 1) {
+        paginaActualRegistros--;
+        cargarTablaRegistros(false);
+      }
+    });
+  }
+
+  if (btnSig && !btnSig.dataset.listener) {
+    btnSig.dataset.listener = "true";
+    btnSig.addEventListener("click", () => {
+      if (paginaActualRegistros < totalPaginasRegistros) {
+        paginaActualRegistros++;
+        cargarTablaRegistros(false);
+      }
+    });
+  }
+
+  if (buscador && !buscador.dataset.listener) {
+    buscador.dataset.listener = "true";
+    buscador.addEventListener("input", () => {
+      clearTimeout(debounceTimerBuscador);
+      debounceTimerBuscador = setTimeout(() => {
+        cargarTablaRegistros(true); // Reinicia a página 1 y busca en toda la BD
+      }, 350);
     });
   }
 }
 
-// Cerrar selectores al hacer clic en cualquier parte fuera de ellos
-if (!window.customDropdownGlobalListener) {
-  window.customDropdownGlobalListener = true;
-  document.addEventListener("click", () => {
-    document
-      .querySelectorAll(".custom-select-wrapper")
-      .forEach((w) => w.classList.remove("activo"));
-  });
-}
-
-// Poblar los dropdowns dinámicamente según los registros existentes
-function poblarDropdownsFiltro() {
-  const usuarios = [
-    ...new Set(
-      listaRegistrosLocal.map((r) => (r.usuario || "").trim()).filter(Boolean),
-    ),
-  ].sort();
-  const notarias = [
-    ...new Set(
-      listaRegistrosLocal
-        .map((r) => (r.notaria || "").toUpperCase().trim())
-        .filter(Boolean),
-    ),
-  ].sort();
-  const volumenes = [
-    ...new Set(
-      listaRegistrosLocal
-        .map((r) => (r.volumen || "").toUpperCase().trim())
-        .filter(Boolean),
-    ),
-  ].sort();
-
-  configurarCustomDropdown("Usuario", usuarios, "Todos los Usuarios");
-  configurarCustomDropdown("Notaria", notarias, "Todas las Notarías");
-  configurarCustomDropdown("Volumen", volumenes, "Todos los Volúmenes");
-
-  // Registrar listeners de clic en las opciones para filtrar de inmediato
-  ["Usuario", "Notaria", "Volumen"].forEach((idDropdown) => {
-    const wrapper = document.getElementById(`wrapperFiltro${idDropdown}`);
-    const btn = document.getElementById(`btnFiltro${idDropdown}`);
-    const optionsDiv = document.getElementById(`optionsFiltro${idDropdown}`);
-    if (!optionsDiv || !btn || !wrapper) return;
-
-    optionsDiv.onclick = (e) => {
-      const opt = e.target.closest(".custom-select-option");
-      if (!opt) return;
-
-      const nuevoValor = opt.getAttribute("data-valor");
-      btn.setAttribute("data-valor", nuevoValor);
-      btn.innerText = opt.innerText;
-
-      optionsDiv
-        .querySelectorAll(".custom-select-option")
-        .forEach((o) => o.classList.remove("seleccionado"));
-      opt.classList.add("seleccionado");
-      wrapper.classList.remove("activo");
-
-      // Disparar renderizado con filtros actualizados
-      const buscador = document.getElementById("buscadorRegistros");
-      filtrarYRenderizarTabla(
-        buscador ? buscador.value.toLowerCase().trim() : "",
-      );
-    };
-  });
-}
-
-// Filtra la lista de registros contemplando los dropdowns y el buscador
-function filtrarYRenderizarTabla(termino) {
+// Renderiza las filas de la tabla cargada
+function renderizarTablaRegistros() {
   const tbody = document.getElementById("tablaRegistrosBody");
   if (!tbody) return;
 
   tbody.innerHTML = "";
 
-  const btnUsuario = document.getElementById("btnFiltroUsuario");
-  const btnNotaria = document.getElementById("btnFiltroNotaria");
-  const btnVolumen = document.getElementById("btnFiltroVolumen");
-
-  const filtroUsuarioVal = btnUsuario
-    ? btnUsuario.getAttribute("data-valor")
-    : "";
-  const filtroNotariaVal = btnNotaria
-    ? btnNotaria.getAttribute("data-valor")
-    : "";
-  const filtroVolumenVal = btnVolumen
-    ? btnVolumen.getAttribute("data-valor")
-    : "";
-
-  const registrosFiltrados = listaRegistrosLocal.filter((reg) => {
-    const pc = (reg.pc || "").toLowerCase();
-    const archivo = (reg.archivo || "").toLowerCase();
-    const notaria = (reg.notaria || "").toUpperCase().trim();
-    const usuario = (reg.usuario || "").trim();
-    const volumen = (reg.volumen || "").toUpperCase().trim();
-
-    // Filtro buscador (coincidencia parcial en PC o archivo)
-    const coincideTexto = pc.includes(termino) || archivo.includes(termino);
-
-    // Filtros dropdown (coincidencia exacta)
-    const coincideUsuario =
-      !filtroUsuarioVal || usuario === filtroUsuarioVal.trim();
-    const coincideNotaria =
-      !filtroNotariaVal || notaria === filtroNotariaVal.toUpperCase().trim();
-    const coincideVolumen =
-      !filtroVolumenVal || volumen === filtroVolumenVal.toUpperCase().trim();
-
-    return (
-      coincideTexto && coincideUsuario && coincideNotaria && coincideVolumen
-    );
-  });
-
-  if (registrosFiltrados.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--color-texto-secundario); padding: 30px;">No se encontraron registros que coincidan con los filtros seleccionados.</td></tr>`;
+  if (listaRegistrosLocal.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--color-texto-secundario); padding: 30px;">No se encontraron registros en la base de datos que coincidan con la búsqueda.</td></tr>`;
     return;
   }
 
-  registrosFiltrados.forEach((reg) => {
+  listaRegistrosLocal.forEach((reg) => {
     const fila = document.createElement("tr");
 
-    // Formatear fecha y hora
     let fechaFormateada = reg.fecha_hora;
     try {
       const date = new Date(reg.fecha_hora);
@@ -1078,6 +1118,11 @@ function filtrarYRenderizarTabla(termino) {
             <td title="${reg.archivo || ""}">${reg.archivo || "-"}</td>
             <td style="text-align: center;">${reg.paginas || 0}</td>
             <td style="text-align: right; font-family: var(--tipografia-cuerpo); font-size: 12px; color: var(--color-texto-secundario);">${fechaFormateada}</td>
+            <td style="text-align: center;">
+              <button type="button" class="btn-eliminar-registro" data-id="${reg.id}" data-archivo="${reg.archivo || "-"}" title="Eliminar registro" style="background: rgba(235, 85, 132, 0.1); border: 1px solid rgba(235, 85, 132, 0.3); cursor: pointer; padding: 4px 8px; border-radius: 6px; color: #eb5584; transition: all 0.2s ease;">
+                <iconify-icon icon="mdi:trash-can-outline" style="font-size: 16px; vertical-align: middle;"></iconify-icon>
+              </button>
+            </td>
         `;
     tbody.appendChild(fila);
   });

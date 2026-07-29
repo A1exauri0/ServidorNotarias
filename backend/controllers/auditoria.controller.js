@@ -309,25 +309,73 @@ async function subirPdf(req, res) {
   }
 }
 
-// Obtiene los registros de auditoría (opcionalmente filtrados por rango de fechas)
+// Obtiene los registros de auditoría con soporte de búsqueda global en toda la BD, filtros y paginación
 async function obtenerRegistros(req, res) {
   try {
-    const { fecha_inicio, fecha_fin } = req.query;
-    let querySql = `
-            SELECT id, fecha_hora, turno, usuario, pc, notaria, volumen, archivo, paginas, exportado 
-            FROM \`auditoria\`
-        `;
-    const queryParams = [];
+    const page = parseInt(req.query.page || 1, 10);
+    const limit = parseInt(req.query.limit || 100, 10);
+    const offset = (page - 1) * limit;
 
-    if (fecha_inicio && fecha_fin) {
-      querySql += ` WHERE DATE(fecha_hora) BETWEEN ? AND ? `;
-      queryParams.push(fecha_inicio, fecha_fin);
+    const { buscar, usuario, notaria, volumen, fecha_inicio, fecha_fin } = req.query;
+
+    const condiciones = [];
+    const params = [];
+
+    if (buscar && buscar.trim() !== "") {
+      const termino = `%${buscar.trim()}%`;
+      condiciones.push("(archivo LIKE ? OR notaria LIKE ? OR volumen LIKE ? OR usuario LIKE ? OR pc LIKE ?)");
+      params.push(termino, termino, termino, termino, termino);
     }
 
-    querySql += ` ORDER BY fecha_hora DESC LIMIT 100 `;
+    if (usuario && usuario.trim() !== "") {
+      condiciones.push("usuario = ?");
+      params.push(usuario.trim());
+    }
 
+    if (notaria && notaria.trim() !== "") {
+      condiciones.push("notaria = ?");
+      params.push(notaria.trim());
+    }
+
+    if (volumen && volumen.trim() !== "") {
+      condiciones.push("volumen = ?");
+      params.push(volumen.trim());
+    }
+
+    if (fecha_inicio && fecha_fin) {
+      condiciones.push("DATE(fecha_hora) BETWEEN ? AND ?");
+      params.push(fecha_inicio, fecha_fin);
+    }
+
+    const whereClause = condiciones.length > 0 ? " WHERE " + condiciones.join(" AND ") : "";
+
+    // 1. Obtener total de registros que coinciden con la búsqueda/filtros
+    const countSql = `SELECT COUNT(*) AS total FROM \`auditoria\` ${whereClause}`;
+    const [countRows] = await dbPool.query(countSql, params);
+    const total = countRows[0] ? countRows[0].total : 0;
+
+    // 2. Obtener la página paginada de 100 en 100
+    const querySql = `
+      SELECT id, fecha_hora, turno, usuario, pc, notaria, volumen, archivo, paginas, exportado 
+      FROM \`auditoria\` 
+      ${whereClause}
+      ORDER BY fecha_hora DESC 
+      LIMIT ? OFFSET ?
+    `;
+
+    const queryParams = [...params, limit, offset];
     const [rows] = await dbPool.query(querySql, queryParams);
-    res.json({ ok: true, registros: rows });
+
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    res.json({
+      ok: true,
+      registros: rows,
+      total,
+      page,
+      limit,
+      totalPages,
+    });
   } catch (error) {
     res.status(500).json({
       ok: false,
@@ -1632,11 +1680,32 @@ function obtenerEstadoTransferenciaSegundoPlano(req, res) {
   res.json({ ok: true, estado: estadoTransferenciaSegundoPlano });
 }
 
+// Elimina un registro de auditoría por su ID
+async function eliminarRegistroAuditoria(req, res) {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ ok: false, mensaje: "Debe especificar el ID del registro a eliminar." });
+    }
+
+    const [resultado] = await dbPool.query("DELETE FROM `auditoria` WHERE id = ?", [id]);
+
+    if (resultado.affectedRows === 0) {
+      return res.status(404).json({ ok: false, mensaje: "El registro no fue encontrado o ya había sido eliminado." });
+    }
+
+    res.json({ ok: true, mensaje: "Registro eliminado correctamente." });
+  } catch (error) {
+    res.status(500).json({ ok: false, mensaje: "Error al eliminar el registro: " + error.message });
+  }
+}
+
 module.exports = {
   inicializarPool,
   registrarAuditoria,
   subirPdf,
   obtenerRegistros,
+  eliminarRegistroAuditoria,
   escanearDirectorio,
   importarArchivoPdf,
   obtenerNotables: obtenerNotariasLocales, // mantiene el alias si existía
