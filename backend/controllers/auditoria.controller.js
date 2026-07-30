@@ -409,6 +409,37 @@ async function obtenerRegistros(req, res) {
   }
 }
 
+// Obtiene el catálogo único de usuarios, notarías y volúmenes para poblar los dropdowns de filtrado
+async function obtenerOpcionesFiltrosRegistros(req, res) {
+  try {
+    const [usuariosRows] = await dbPool.query(
+      "SELECT DISTINCT usuario FROM `auditoria` WHERE usuario IS NOT NULL AND usuario != '' AND usuario != 'Desconocido' ORDER BY usuario ASC"
+    );
+    const [notariasRows] = await dbPool.query(
+      "SELECT DISTINCT notaria FROM `auditoria` WHERE notaria IS NOT NULL AND notaria != '' ORDER BY notaria ASC"
+    );
+    const [volumenesRows] = await dbPool.query(
+      "SELECT DISTINCT volumen FROM `auditoria` WHERE volumen IS NOT NULL AND volumen != '' AND volumen != 'SIN VOLUMEN' ORDER BY volumen ASC"
+    );
+
+    const usuarios = usuariosRows.map((r) => r.usuario);
+    const notarias = notariasRows.map((r) => r.notaria);
+    const volumenes = volumenesRows.map((r) => r.volumen);
+
+    res.json({
+      ok: true,
+      usuarios,
+      notarias,
+      volumenes,
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      mensaje: "Error al obtener opciones de filtros: " + error.message,
+    });
+  }
+}
+
 // Obtiene el listado de carpetas que representan notarias en C:\NOTARIAS, C:\NOMINAS y C:\LIBROS
 async function obtenerNotariasLocales(req, res) {
   try {
@@ -1728,6 +1759,7 @@ module.exports = {
   registrarAuditoria,
   subirPdf,
   obtenerRegistros,
+  obtenerOpcionesFiltrosRegistros,
   eliminarRegistroAuditoria,
   escanearDirectorio,
   importarArchivoPdf,

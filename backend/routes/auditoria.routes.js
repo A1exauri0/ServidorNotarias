@@ -80,6 +80,7 @@ router.post(
 
 // 3. Endpoint para obtener y eliminar registros
 router.get("/registros", controladorAuditoria.obtenerRegistros);
+router.get("/filtros-registros", controladorAuditoria.obtenerOpcionesFiltrosRegistros);
 router.delete("/registros/:id", controladorAuditoria.eliminarRegistroAuditoria);
 
 // 4. Endpoints para la importación masiva desde directorios locales o de red

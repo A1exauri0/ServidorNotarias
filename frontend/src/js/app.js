@@ -919,6 +919,9 @@ async function cargarTablaRegistros(resetPagina = false) {
       paginaActualRegistros = datos.page || 1;
       totalPaginasRegistros = datos.totalPages || 1;
 
+      // Cargar catálogos dinámicos para los dropdowns
+      cargarOpcionesFiltrosRegistros();
+
       // Actualizar la interfaz de paginación y renderizar
       actualizarInterfazPaginacion();
       renderizarTablaRegistros();
@@ -931,6 +934,71 @@ async function cargarTablaRegistros(resetPagina = false) {
   } catch (error) {
     console.error("Error de red al cargar registros:", error);
   }
+}
+
+let catalogosFiltrosCargados = false;
+
+// Carga las opciones únicas de usuarios, notarías y volúmenes desde el servidor para los dropdowns
+async function cargarOpcionesFiltrosRegistros() {
+  if (catalogosFiltrosCargados) return;
+  try {
+    const resp = await fetch("http://localhost:3000/api/filtros-registros");
+    const datos = await resp.json();
+
+    if (datos.ok) {
+      catalogosFiltrosCargados = true;
+      poblarCustomSelect("Usuario", datos.usuarios || [], "Todos los Usuarios");
+      poblarCustomSelect("Notaria", datos.notarias || [], "Todas las Notarías");
+      poblarCustomSelect("Volumen", datos.volumenes || [], "Todos los Volúmenes");
+    }
+  } catch (error) {
+    console.error("Error al cargar opciones de filtros:", error);
+  }
+}
+
+// Pobla las opciones de un custom select interactivo
+function poblarCustomSelect(idDropdown, opciones, textoDefecto) {
+  const btn = document.getElementById(`btnFiltro${idDropdown}`);
+  const wrapper = document.getElementById(`wrapperFiltro${idDropdown}`);
+  const optionsDiv = document.getElementById(`optionsFiltro${idDropdown}`);
+  if (!btn || !wrapper || !optionsDiv) return;
+
+  const valorActual = btn.getAttribute("data-valor") || "";
+
+  let html = `<div class="custom-select-option ${valorActual === "" ? "seleccionado" : ""}" data-valor="">${textoDefecto}</div>`;
+  opciones.forEach((optVal) => {
+    html += `<div class="custom-select-option ${valorActual === optVal ? "seleccionado" : ""}" data-valor="${optVal}">${optVal}</div>`;
+  });
+  optionsDiv.innerHTML = html;
+
+  // Abrir/cerrar dropdown al hacer clic en el botón
+  if (!btn.dataset.listener) {
+    btn.dataset.listener = "true";
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      document.querySelectorAll(".custom-select-wrapper").forEach((w) => {
+        if (w !== wrapper) w.classList.remove("activo");
+      });
+      wrapper.classList.toggle("activo");
+    });
+  }
+
+  // Al seleccionar una opción en el menú desplegable
+  optionsDiv.onclick = (e) => {
+    const opt = e.target.closest(".custom-select-option");
+    if (!opt) return;
+
+    const nuevoValor = opt.getAttribute("data-valor");
+    btn.setAttribute("data-valor", nuevoValor);
+    btn.innerText = opt.innerText;
+
+    optionsDiv.querySelectorAll(".custom-select-option").forEach((o) => o.classList.remove("seleccionado"));
+    opt.classList.add("seleccionado");
+    wrapper.classList.remove("activo");
+
+    // Reiniciar paginación y consultar con el nuevo filtro
+    cargarTablaRegistros(true);
+  };
 }
 
 // Renderiza los controles de paginación
