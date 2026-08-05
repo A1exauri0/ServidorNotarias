@@ -5,9 +5,43 @@
 
 const fs = require("fs");
 const path = require("path");
+const { pipeline } = require("stream/promises");
 const { PDFDocument } = require("pdf-lib");
 
 let dbPool = null;
+
+// Helper robusto para copiar archivos a través de red UNC soportando reintentos y streams (para evitar ECONNRESET / UNKNOWN)
+async function copiarArchivoRobusto(rutaOrigen, rutaDestino, maxIntentos = 3) {
+  if (rutaOrigen === rutaDestino) return;
+
+  for (let intento = 1; intento <= maxIntentos; intento++) {
+    try {
+      // 1. Intentar con fs.promises.copyFile
+      await fs.promises.copyFile(rutaOrigen, rutaDestino);
+      return; // Éxito
+    } catch (errorCopy) {
+      console.warn(`⚠️ [Intento ${intento}/${maxIntentos}] Falló copyFile directo para ${path.basename(rutaOrigen)}: ${errorCopy.message}`);
+
+      // 2. Si falló copyFile, intentar respaldo mediante streams
+      try {
+        const readStream = fs.createReadStream(rutaOrigen);
+        const writeStream = fs.createWriteStream(rutaDestino);
+        await pipeline(readStream, writeStream);
+        return; // Éxito vía streams
+      } catch (errorStream) {
+        console.warn(`⚠️ [Intento ${intento}/${maxIntentos}] Falló copia vía stream para ${path.basename(rutaOrigen)}: ${errorStream.message}`);
+      }
+
+      // Si fue el último intento, lanzar la excepción
+      if (intento === maxIntentos) {
+        throw new Error(`Error al transferir archivo tras ${maxIntentos} intentos: ${errorCopy.message}`);
+      }
+
+      // Pausa exponencial entre reintentos para permitir que la red se recupere (300ms, 600ms, 1200ms)
+      await new Promise((r) => setTimeout(r, intento * 300));
+    }
+  }
+}
 
 // Helper seguro para crear carpetas sin fallar en rutas de red UNC de Windows (\\servidor\recurso)
 async function asegurarDirectorio(targetPath) {
@@ -243,9 +277,9 @@ async function subirPdf(req, res) {
     // Asegurar que el directorio de destino exista de forma asíncrona y segura en red UNC
     await asegurarDirectorio(carpetaDestinoFinal);
 
-    // Copiar de forma asíncrona para liberar por completo el Event Loop de Node.js
+    // Copiar de forma asíncrona usando la función robusta con reintentos y streams (apta para red UNC)
     if (rutaCompletaTemporal !== rutaDestinoArchivo) {
-      await fs.promises.copyFile(rutaCompletaTemporal, rutaDestinoArchivo);
+      await copiarArchivoRobusto(rutaCompletaTemporal, rutaDestinoArchivo);
     }
     rutaFinalArchivo = rutaDestinoArchivo;
 
@@ -353,7 +387,7 @@ async function obtenerRegistros(req, res) {
     }
 
     if (usuario && usuario.trim() !== "") {
-      condiciones.push("usuario = ?");
+      condiciones.push("LOWER(usuario) = LOWER(?)");
       params.push(usuario.trim());
     }
 
@@ -368,7 +402,7 @@ async function obtenerRegistros(req, res) {
     }
 
     if (fecha_inicio && fecha_fin) {
-      condiciones.push("DATE(fecha_hora) BETWEEN ? AND ?");
+      condiciones.push("DATE(COALESCE(created_at, fecha_hora)) BETWEEN ? AND ?");
       params.push(fecha_inicio, fecha_fin);
     }
 
@@ -379,12 +413,23 @@ async function obtenerRegistros(req, res) {
     const [countRows] = await dbPool.query(countSql, params);
     const total = countRows[0] ? countRows[0].total : 0;
 
-    // 2. Obtener la página paginada de 100 en 100
+    // 2. Obtener la página paginada ordenando por el timestamp created_at de MySQL
     const querySql = `
-      SELECT id, fecha_hora, turno, usuario, pc, notaria, volumen, archivo, paginas, exportado 
+      SELECT 
+        id, 
+        DATE_FORMAT(COALESCE(created_at, fecha_hora), '%Y-%m-%d %H:%i:%s') AS fecha_hora, 
+        created_at,
+        turno, 
+        usuario, 
+        pc, 
+        notaria, 
+        volumen, 
+        archivo, 
+        paginas, 
+        exportado 
       FROM \`auditoria\` 
       ${whereClause}
-      ORDER BY fecha_hora DESC 
+      ORDER BY COALESCE(created_at, fecha_hora) DESC 
       LIMIT ? OFFSET ?
     `;
 
@@ -711,7 +756,7 @@ async function importarArchivoPdf(req, res) {
 
       await asegurarDirectorio(carpetaDestinoFinal);
       if (rutaCompleta !== rutaDestinoArchivo) {
-        await fs.promises.copyFile(rutaCompleta, rutaDestinoArchivo);
+        await copiarArchivoRobusto(rutaCompleta, rutaDestinoArchivo);
       }
       viaTransferencia = "copia_red_unc";
     }

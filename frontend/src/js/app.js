@@ -1228,7 +1228,6 @@ function exportarRegistrosExcel() {
   const optionsTipo = document.getElementById("optionsExcelTipoReporte");
 
   if (btnTipo && wrapperTipo && optionsTipo) {
-    // Resetear valor visual por defecto
     const seleccionadoOpt = optionsTipo.querySelector(".custom-select-option.seleccionado");
     if (seleccionadoOpt) {
       btnTipo.setAttribute("data-valor", seleccionadoOpt.getAttribute("data-valor") || "detallado");
@@ -1254,9 +1253,7 @@ function exportarRegistrosExcel() {
       btnTipo.setAttribute("data-valor", nuevoValor);
       btnTipo.innerText = opt.innerText;
 
-      optionsTipo
-        .querySelectorAll(".custom-select-option")
-        .forEach((o) => o.classList.remove("seleccionado"));
+      optionsTipo.querySelectorAll(".custom-select-option").forEach((o) => o.classList.remove("seleccionado"));
       opt.classList.add("seleccionado");
       wrapperTipo.classList.remove("activo");
     };

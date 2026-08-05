@@ -37,17 +37,16 @@ function resolverFechaYTurnoDeJornada(fechaHoraStr, turnoPerfil) {
 
   let turno = "Matutino";
 
-  if (hora >= 6 && hora < 14) {
+  // Ampliar ventana de madrugada nocturna de 00:00 AM a 06:59 AM (asociar al día anterior)
+  if (hora >= 0 && hora < 7) {
+    turno = "Nocturno";
+    fechaJornada.setDate(fechaJornada.getDate() - 1);
+  } else if (hora >= 7 && hora < 14) {
     turno = "Matutino";
   } else if (hora >= 14 && hora < 22) {
     turno = "Vespertino";
   } else {
     turno = "Nocturno";
-    // Si la hora es de 00:00 a 05:59 AM y el turno es NOCTURNO, pertenece a la jornada que inició la noche anterior
-    const esNocturno = turnoPerfil && turnoPerfil.toUpperCase() === "NOCTURNO";
-    if (hora < 6 && esNocturno) {
-      fechaJornada.setDate(fechaJornada.getDate() - 1);
-    }
   }
 
   // Fines de semana: si la jornada cae en Sabado (6) o Domingo (0), se acumulan al dia Viernes anterior
@@ -182,34 +181,53 @@ async function obtenerProductividadDiaria(req, res) {
     const [registros] = await dbPool.query(
       `
             SELECT 
-                DATE_FORMAT(a.fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, 
+                DATE_FORMAT(COALESCE(a.created_at, a.fecha_hora), '%Y-%m-%d %H:%i:%s') AS fecha_hora, 
                 a.usuario, 
+                a.notaria,
+                a.volumen,
+                a.archivo,
                 a.paginas, 
                 a.turno,
                 u.turno AS turno_usuario
             FROM \`auditoria\` a
-            LEFT JOIN \`usuarios\` u ON a.usuario = u.nombre_usuario
-            WHERE a.fecha_hora >= ? AND a.fecha_hora <= ?
+            LEFT JOIN \`usuarios\` u ON LOWER(a.usuario) = LOWER(u.nombre_usuario)
+            WHERE COALESCE(a.created_at, a.fecha_hora) >= ? AND COALESCE(a.created_at, a.fecha_hora) <= ?
               AND a.usuario IS NOT NULL AND a.usuario != '' AND a.usuario != 'Desconocido'
         `,
       [fechaInicioCompleta, fechaFinCompleta],
     );
 
-    const agrupadoDiario = {};
-
+    // Deduplicar registros por usuario, notaria, volumen, archivo y fecha para no eliminar archivos distintos del mismo usuario
+    const deduplicadosMap = {};
     registros.forEach((r) => {
       if (!r.usuario || r.usuario === "Desconocido") return;
+      const userNorm = r.usuario.trim().toLowerCase();
+      const notariaNorm = (r.notaria || "").trim().toLowerCase();
+      const volNorm = (r.volumen || "").trim().toLowerCase();
+      const archNorm = (r.archivo || "").trim().toLowerCase();
+      const fechaNorm = r.fecha_hora.slice(0, 10);
+
+      const claveUnicaArch = `${userNorm}_${notariaNorm}_${volNorm}_${archNorm}_${fechaNorm}`;
+      if (!deduplicadosMap[claveUnicaArch]) {
+        deduplicadosMap[claveUnicaArch] = r;
+      }
+    });
+
+    const registrosDeduplicados = Object.values(deduplicadosMap);
+    const agrupadoDiario = {};
+
+    registrosDeduplicados.forEach((r) => {
       const turnoOficial = r.turno_usuario || r.turno;
       const { fechaStr, turno: turnoCalculado } = resolverFechaYTurnoDeJornada(r.fecha_hora, turnoOficial);
-      const turnoFinal = turnoOficial || turnoCalculado || "Matutino";
-      const usuario = r.usuario;
+      const turnoFinal = turnoCalculado || "Matutino";
+      const usuarioNorm = r.usuario.trim();
       const paginas = parseInt(r.paginas || 0, 10);
 
-      const clave = `${fechaStr}_${usuario.toUpperCase()}_${turnoFinal}`;
+      const clave = `${fechaStr}_${usuarioNorm.toUpperCase()}_${turnoFinal}`;
       if (!agrupadoDiario[clave]) {
         agrupadoDiario[clave] = {
           fecha: fechaStr,
-          usuario: usuario,
+          usuario: usuarioNorm,
           turno: turnoFinal,
           total_pdfs: 0,
           total_paginas: 0
@@ -249,22 +267,16 @@ async function exportarExcelAuditoria(req, res) {
       });
     }
 
-    const limiteFinDate = new Date(fecha_fin + "T12:00:00");
-    limiteFinDate.setDate(limiteFinDate.getDate() + 1);
-    const anioF = limiteFinDate.getFullYear();
-    const mesF = String(limiteFinDate.getMonth() + 1).padStart(2, "0");
-    const diaF = String(limiteFinDate.getDate()).padStart(2, "0");
-    const fechaFinMas1 = `${anioF}-${mesF}-${diaF}`;
-
     const fechaInicioCompleta = `${fecha_inicio} 00:00:00`;
-    const fechaFinCompleta = `${fechaFinMas1} 05:59:59`;
+    const fechaFinCompleta = `${fecha_fin} 23:59:59`;
 
-    // Consultar todos los registros en el rango de fecha/hora de jornada, uniendo con usuarios y su turno oficial
+    // Consultar todos los registros en el rango estricto basándonos únicamente en la fecha de creación original (created_at)
     const [registros] = await dbPool.query(
       `
             SELECT 
                 a.id, 
-                DATE_FORMAT(a.fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, 
+                DATE_FORMAT(COALESCE(a.created_at, a.fecha_hora), '%Y-%m-%d %H:%i:%s') AS fecha_hora, 
+                a.created_at,
                 a.turno, 
                 u.turno AS turno_usuario,
                 a.usuario, 
@@ -278,8 +290,8 @@ async function exportarExcelAuditoria(req, res) {
                 a.exportado, 
                 a.lugar_trabajo 
             FROM \`auditoria\` a
-            LEFT JOIN \`usuarios\` u ON a.usuario = u.nombre_usuario
-            WHERE a.fecha_hora >= ? AND a.fecha_hora <= ?
+            LEFT JOIN \`usuarios\` u ON LOWER(a.usuario) = LOWER(u.nombre_usuario)
+            WHERE COALESCE(a.created_at, a.fecha_hora) >= ? AND COALESCE(a.created_at, a.fecha_hora) <= ?
               AND a.usuario IS NOT NULL AND a.usuario != '' AND a.usuario != 'Desconocido'
         `,
       [fechaInicioCompleta, fechaFinCompleta],
@@ -292,12 +304,36 @@ async function exportarExcelAuditoria(req, res) {
       });
     }
 
-    // 1. Agrupar por Fecha usando la lógica fiscal de turnos y fines de semana
+    // Obtener la fecha y hora local actual para aplicar filtrado inteligente si se consulta el día de hoy
+    const fechaHoraActual = new Date();
+    const hoyStr = `${fechaHoraActual.getFullYear()}-${String(fechaHoraActual.getMonth() + 1).padStart(2, "0")}-${String(fechaHoraActual.getDate()).padStart(2, "0")}`;
+    const horaActual = fechaHoraActual.getHours();
+
+    // 1. Agrupar por Fecha usando la regla fiscal y filtrado inteligente según la hora del día
     const registrosPorFecha = {};
     registros.forEach((reg) => {
       const turnoOficial = reg.turno_usuario || reg.turno;
-      const { fechaStr, turno } = resolverFechaYTurnoDeJornada(reg.fecha_hora, turnoOficial);
-      const turnoFinal = turnoOficial || turno || "Matutino";
+      let { fechaStr, turno } = resolverFechaYTurnoDeJornada(reg.fecha_hora, turnoOficial);
+
+      // Si la fecha de la jornada pertenece estrictamente a las fechas consultadas por el usuario
+      if (fechaStr < fecha_inicio || fechaStr > fecha_fin) {
+        return; // Pertenece a la jornada del día anterior o posterior
+      }
+
+      const turnoFinal = turno || "Matutino";
+
+      // Si se está generando el reporte para el día de HOY, filtrar según el avance del día:
+      if (fechaStr === hoyStr) {
+        if (horaActual < 14) {
+          // Antes de las 2:00 PM (ej: 11:00 AM): solo mostrar turno Matutino
+          if (turnoFinal !== "Matutino") return;
+        } else if (horaActual < 22) {
+          // Entre 2:00 PM y 10:00 PM (ej: 5:00 PM): mostrar Matutino y Vespertino
+          if (turnoFinal === "Nocturno") return;
+        }
+        // En la noche (después de las 10:00 PM) o madrugada: se muestran los 3 turnos
+      }
+
       reg.fecha_calculada = fechaStr;
       reg.turno_calculado = turnoFinal;
 
@@ -369,8 +405,8 @@ async function exportarExcelAuditoria(req, res) {
         if (fecha < fecha_inicio || fecha > fecha_fin) return;
 
         const nombreKey = (reg.nombre_completo || reg.usuario || "DESCONOCIDO").toUpperCase();
-        // Dar prioridad al turno oficial de la tabla de usuarios
-        const turnoOficial = (reg.turno_usuario || reg.turno || reg.turno_calculado || "Matutino").toUpperCase();
+        // Usar la hora real del reloj de la captura para el turno del reporte
+        const turnoOficial = (reg.turno_calculado || "Matutino").toUpperCase();
 
         if (!mapaGeneral[nombreKey]) {
           mapaGeneral[nombreKey] = {
@@ -589,7 +625,7 @@ async function exportarExcelAuditoria(req, res) {
         registrosAgrupados[fecha][pc][ip][usuario] = {};
       }
 
-      const turno = reg.turno_usuario || reg.turno || reg.turno_calculado || "Matutino";
+      const turno = reg.turno_calculado || "Matutino";
       if (!registrosAgrupados[fecha][pc][ip][usuario][turno]) {
         registrosAgrupados[fecha][pc][ip][usuario][turno] = [];
       }
