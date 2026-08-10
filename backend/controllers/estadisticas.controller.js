@@ -11,7 +11,7 @@ const { exec } = require("child_process");
 let dbPool = null;
 
 // Helper para calcular la fecha fiscal de jornada y el turno en base a los horarios locales y fines de semana
-function resolverFechaYTurnoDeJornada(fechaHoraStr, turnoPerfil) {
+function resolverFechaYTurnoDeJornada(fechaHoraStr, turnoOficial) {
   let hora = 0;
   let fechaJornada;
 
@@ -35,26 +35,22 @@ function resolverFechaYTurnoDeJornada(fechaHoraStr, turnoPerfil) {
     fechaJornada = d;
   }
 
-  let turno = "Matutino";
+  // Normalizar el turno asignado o heredado del usuario/registro
+  let turnoFinal = (turnoOficial || "Matutino").trim();
+  const turnoUpper = turnoFinal.toUpperCase();
 
-  // Ampliar ventana de madrugada nocturna de 00:00 AM a 06:59 AM (asociar al día anterior)
-  if (hora >= 0 && hora < 7) {
-    turno = "Nocturno";
-    fechaJornada.setDate(fechaJornada.getDate() - 1);
-  } else if (hora >= 7 && hora < 14) {
-    turno = "Matutino";
-  } else if (hora >= 14 && hora < 22) {
-    turno = "Vespertino";
+  if (turnoUpper === "NOCTURNO") {
+    turnoFinal = "Nocturno";
+    // Si la captura de nocturno ocurrió en la madrugada (00:00 a 05:59 AM), pertenece a la jornada de la noche anterior
+    if (hora >= 0 && hora < 6) {
+      fechaJornada.setDate(fechaJornada.getDate() - 1);
+    }
+  } else if (turnoUpper === "VESPERTINO") {
+    turnoFinal = "Vespertino";
+    // Matutino y Vespertino respetan la fecha natural exacta del día de la captura
   } else {
-    turno = "Nocturno";
-  }
-
-  // Fines de semana: si la jornada cae en Sabado (6) o Domingo (0), se acumulan al dia Viernes anterior
-  const diaSemana = fechaJornada.getDay();
-  if (diaSemana === 6) {
-    fechaJornada.setDate(fechaJornada.getDate() - 1);
-  } else if (diaSemana === 0) {
-    fechaJornada.setDate(fechaJornada.getDate() - 2);
+    turnoFinal = "Matutino";
+    // Matutino y Vespertino respetan la fecha natural exacta del día de la captura
   }
 
   const a = fechaJornada.getFullYear();
@@ -62,7 +58,7 @@ function resolverFechaYTurnoDeJornada(fechaHoraStr, turnoPerfil) {
   const d = String(fechaJornada.getDate()).padStart(2, "0");
   const fechaStr = `${a}-${m}-${d}`;
 
-  return { fechaStr, turno };
+  return { fechaStr, turno: turnoFinal };
 }
 
 // Inicializa el pool de base de datos desde server.js
@@ -81,22 +77,22 @@ async function obtenerProductividadGeneral(req, res) {
       });
     }
 
-    const limiteFinDate = new Date(fecha_fin + "T12:00:00");
-    limiteFinDate.setDate(limiteFinDate.getDate() + 1);
-    const anioF = limiteFinDate.getFullYear();
-    const mesF = String(limiteFinDate.getMonth() + 1).padStart(2, "0");
-    const diaF = String(limiteFinDate.getDate()).padStart(2, "0");
-    const fechaFinMas1 = `${anioF}-${mesF}-${diaF}`;
-
-    const fechaInicioCompleta = `${fecha_inicio} 06:00:00`;
-    const fechaFinCompleta = `${fechaFinMas1} 05:59:59`;
+    const fechaInicioCompleta = `${fecha_inicio} 00:00:00`;
+    const fechaFinCompleta = `${fecha_fin} 23:59:59`;
 
     // Consultamos los registros brutos en el rango de fecha/hora de jornada
     const [registros] = await dbPool.query(
       `
-            SELECT DATE_FORMAT(fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, notaria, volumen, paginas, turno
-            FROM \`auditoria\`
-            WHERE fecha_hora >= ? AND fecha_hora <= ?
+            SELECT 
+                DATE_FORMAT(a.fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, 
+                a.notaria, 
+                a.volumen, 
+                a.paginas, 
+                a.turno,
+                u.turno AS turno_usuario
+            FROM \`auditoria\` a
+            LEFT JOIN \`usuarios\` u ON LOWER(a.usuario) = LOWER(u.nombre_usuario)
+            WHERE a.fecha_hora >= ? AND a.fecha_hora <= ?
         `,
       [fechaInicioCompleta, fechaFinCompleta],
     );
@@ -105,9 +101,9 @@ async function obtenerProductividadGeneral(req, res) {
     const agrupadoTurnos = {};
 
     registros.forEach((r) => {
-      const turnoOficial = r.turno_usuario || r.turno;
+      const turnoOficial = r.turno_usuario || r.turno || "Matutino";
       const { fechaStr, turno } = resolverFechaYTurnoDeJornada(r.fecha_hora, turnoOficial);
-      const turnoFinal = turnoOficial || turno || "Matutino";
+      const turnoFinal = turno || turnoOficial;
       const notaria = r.notaria || "General";
       const volumen = r.volumen || "Sin volumen";
       const paginas = parseInt(r.paginas || 0, 10);
@@ -270,16 +266,16 @@ async function exportarExcelAuditoria(req, res) {
     const fechaInicioCompleta = `${fecha_inicio} 00:00:00`;
     const fechaFinCompleta = `${fecha_fin} 23:59:59`;
 
-    // Consultar todos los registros en el rango estricto basándonos únicamente en la fecha de creación original (created_at)
+    // Consultar todos los registros en el rango estricto basándonos en fecha_hora
     const [registros] = await dbPool.query(
       `
             SELECT 
                 a.id, 
-                DATE_FORMAT(COALESCE(a.created_at, a.fecha_hora), '%Y-%m-%d %H:%i:%s') AS fecha_hora, 
+                DATE_FORMAT(a.fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, 
                 a.created_at,
                 a.turno, 
                 u.turno AS turno_usuario,
-                a.usuario, 
+                COALESCE(u.nombre_usuario, LOWER(a.usuario)) AS usuario, 
                 COALESCE(u.nombre_completo, UPPER(a.usuario)) AS nombre_completo,
                 a.pc, 
                 a.ip, 
@@ -291,7 +287,7 @@ async function exportarExcelAuditoria(req, res) {
                 a.lugar_trabajo 
             FROM \`auditoria\` a
             LEFT JOIN \`usuarios\` u ON LOWER(a.usuario) = LOWER(u.nombre_usuario)
-            WHERE COALESCE(a.created_at, a.fecha_hora) >= ? AND COALESCE(a.created_at, a.fecha_hora) <= ?
+            WHERE a.fecha_hora >= ? AND a.fecha_hora <= ?
               AND a.usuario IS NOT NULL AND a.usuario != '' AND a.usuario != 'Desconocido'
         `,
       [fechaInicioCompleta, fechaFinCompleta],
@@ -304,36 +300,18 @@ async function exportarExcelAuditoria(req, res) {
       });
     }
 
-    // Obtener la fecha y hora local actual para aplicar filtrado inteligente si se consulta el día de hoy
-    const fechaHoraActual = new Date();
-    const hoyStr = `${fechaHoraActual.getFullYear()}-${String(fechaHoraActual.getMonth() + 1).padStart(2, "0")}-${String(fechaHoraActual.getDate()).padStart(2, "0")}`;
-    const horaActual = fechaHoraActual.getHours();
-
-    // 1. Agrupar por Fecha usando la regla fiscal y filtrado inteligente según la hora del día
+    // 1. Agrupar por Fecha sin descartar ningún registro
     const registrosPorFecha = {};
     registros.forEach((reg) => {
       const turnoOficial = reg.turno_usuario || reg.turno;
       let { fechaStr, turno } = resolverFechaYTurnoDeJornada(reg.fecha_hora, turnoOficial);
 
-      // Si la fecha de la jornada pertenece estrictamente a las fechas consultadas por el usuario
+      // Si la fecha pertenece a las fechas consultadas por el usuario
       if (fechaStr < fecha_inicio || fechaStr > fecha_fin) {
-        return; // Pertenece a la jornada del día anterior o posterior
+        return;
       }
 
       const turnoFinal = turno || "Matutino";
-
-      // Si se está generando el reporte para el día de HOY, filtrar según el avance del día:
-      if (fechaStr === hoyStr) {
-        if (horaActual < 14) {
-          // Antes de las 2:00 PM (ej: 11:00 AM): solo mostrar turno Matutino
-          if (turnoFinal !== "Matutino") return;
-        } else if (horaActual < 22) {
-          // Entre 2:00 PM y 10:00 PM (ej: 5:00 PM): mostrar Matutino y Vespertino
-          if (turnoFinal === "Nocturno") return;
-        }
-        // En la noche (después de las 10:00 PM) o madrugada: se muestran los 3 turnos
-      }
-
       reg.fecha_calculada = fechaStr;
       reg.turno_calculado = turnoFinal;
 
@@ -561,7 +539,7 @@ async function exportarExcelAuditoria(req, res) {
         });
       });
 
-      // Generar nombre de archivo con timestamp
+      // Generar nombre de archivo con timestamp e idUnico anti-bloqueo EBUSY
       const ahora = new Date();
       const anio = ahora.getFullYear();
       const mes = String(ahora.getMonth() + 1).padStart(2, "0");
@@ -569,7 +547,8 @@ async function exportarExcelAuditoria(req, res) {
       const hora = String(ahora.getHours()).padStart(2, "0");
       const min = String(ahora.getMinutes()).padStart(2, "0");
       const seg = String(ahora.getSeconds()).padStart(2, "0");
-      let nombreArchivo = `Reporte_Concentrado_Auditoria_${anio}${mes}${dia}_${hora}${min}${seg}.xlsx`;
+      const idUnico = Date.now().toString().slice(-5);
+      let nombreArchivo = `Reporte_Concentrado_Auditoria_${anio}${mes}${dia}_${hora}${min}${seg}_${idUnico}.xlsx`;
 
       const carpetaDescargas = path.join(
         process.env.USERPROFILE || process.env.HOME || "C:\\",
@@ -587,21 +566,21 @@ async function exportarExcelAuditoria(req, res) {
         await workbook.xlsx.writeFile(rutaCompleta);
       }
 
-      // Abrir archivo automáticamente
-      exec(`start "" "${rutaCompleta}"`, (err) => {
+      // Abrir archivo automáticamente en Windows mediante cmd.exe o PowerShell
+      exec(`cmd.exe /c start "" "${rutaCompleta}"`, (err) => {
         if (err) {
-          console.error("Error al abrir Excel automáticamente:", err);
+          exec(`powershell.exe -Command "Start-Process '${rutaCompleta}'"`);
         }
       });
 
       return res.json({
         ok: true,
-        mensaje: "Reporte Excel concentrado generado y abierto con éxito.",
+        mensaje: "Reporte Excel generado y abierto correctamente.",
         ruta: rutaCompleta,
       });
     }
 
-    // 4. Agrupar por Fecha -> PC -> IP -> Usuario -> Turno (Para el formato Detallado por pestañas)
+    // 4. Agrupar por Fecha -> Usuario + PC + Turno (Para el formato Detallado por pestañas)
     const registrosAgrupados = {};
     registrosDeduplicados.forEach((reg) => {
       const fecha = reg.fecha_calculada;
@@ -610,27 +589,22 @@ async function exportarExcelAuditoria(req, res) {
         registrosAgrupados[fecha] = {};
       }
 
+      const usuario = (reg.usuario || "Desconocido").toLowerCase().trim();
       const pc = reg.pc || "Desconocido";
-      if (!registrosAgrupados[fecha][pc]) {
-        registrosAgrupados[fecha][pc] = {};
-      }
-
-      const ip = reg.ip || "Desconocido";
-      if (!registrosAgrupados[fecha][pc][ip]) {
-        registrosAgrupados[fecha][pc][ip] = {};
-      }
-
-      const usuario = reg.usuario || "Desconocido";
-      if (!registrosAgrupados[fecha][pc][ip][usuario]) {
-        registrosAgrupados[fecha][pc][ip][usuario] = {};
-      }
-
       const turno = reg.turno_calculado || "Matutino";
-      if (!registrosAgrupados[fecha][pc][ip][usuario][turno]) {
-        registrosAgrupados[fecha][pc][ip][usuario][turno] = [];
+
+      const claveFila = `${usuario}_${pc.toLowerCase()}_${turno.toLowerCase()}`;
+      if (!registrosAgrupados[fecha][claveFila]) {
+        registrosAgrupados[fecha][claveFila] = {
+          pc: pc,
+          lugar: reg.lugar_trabajo || "IREC",
+          usuario: usuario,
+          turno: turno,
+          registros: [],
+        };
       }
 
-      registrosAgrupados[fecha][pc][ip][usuario][turno].push(reg);
+      registrosAgrupados[fecha][claveFila].registros.push(reg);
     });
 
     // Crear Libro de Excel
@@ -671,59 +645,53 @@ async function exportarExcelAuditoria(req, res) {
       });
       worksheet.getRow(1).height = 25;
 
-      // Filas
-      const listaFilas = [];
-      const pcsDeLaFecha = registrosAgrupados[fecha];
-      Object.keys(pcsDeLaFecha).forEach((pc) => {
-        const ipsDeLaPc = pcsDeLaFecha[pc];
-        Object.keys(ipsDeLaPc).forEach((ip) => {
-          const usuariosDeLaIp = ipsDeLaPc[ip];
-          Object.keys(usuariosDeLaIp).forEach((usuario) => {
-            const turnosDelUsuario = usuariosDeLaIp[usuario];
-            Object.keys(turnosDelUsuario).forEach((turno) => {
-              const listaRegs = turnosDelUsuario[turno];
-              const totalPdfs = listaRegs.length;
-              const totalPaginas = listaRegs.reduce(
-                (sum, r) => sum + (r.paginas > 0 ? r.paginas : 1),
-                0,
-              );
-              const lugar =
-                listaRegs.find((r) => r.lugar_trabajo)?.lugar_trabajo || "IREC";
-              listaFilas.push({
-                pc,
-                lugar,
-                usuario,
-                turno,
-                pdfs: totalPdfs,
-                paginas: totalPaginas,
-              });
-            });
-          });
-        });
+      // Filas consolidadas ordenadas estrictamente por Turno (Matutino -> Vespertino -> Nocturno) y Usuario
+      const ordenTurnos = { matutino: 1, vespertino: 2, nocturno: 3 };
+      const filasDeLaFecha = Object.values(registrosAgrupados[fecha]);
+      filasDeLaFecha.sort((a, b) => {
+        const tA = ordenTurnos[(a.turno || "").toLowerCase().trim()] || 4;
+        const tB = ordenTurnos[(b.turno || "").toLowerCase().trim()] || 4;
+        if (tA !== tB) {
+          return tA - tB; // 1. Matutino, 2. Vespertino, 3. Nocturno
+        }
+        return a.usuario.localeCompare(b.usuario);
       });
 
-      // Ordenar por turno
-      const filasOrdenadas = listaFilas.sort((a, b) => {
-        const turnosOrden = { matutino: 1, vespertino: 2, nocturno: 3 };
-        const ordenA = turnosOrden[a.turno.toLowerCase()] || 4;
-        const ordenB = turnosOrden[b.turno.toLowerCase()] || 4;
-        return ordenA - ordenB;
-      });
+      filasDeLaFecha.forEach((item) => {
+        const totalPdfs = item.registros.length;
+        const totalPaginas = item.registros.reduce(
+          (sum, r) => sum + (parseInt(r.paginas || 0, 10) > 0 ? parseInt(r.paginas, 10) : 1),
+          0,
+        );
 
-      filasOrdenadas.forEach((fila) => {
         const row = worksheet.addRow({
-          pc: fila.pc,
-          lugar: fila.lugar,
-          usuario: fila.usuario,
-          turno: fila.turno,
-          pdfs: fila.pdfs,
-          paginas: fila.paginas,
+          pc: item.pc,
+          lugar: item.lugar,
+          usuario: item.usuario,
+          turno: item.turno,
+          pdfs: totalPdfs,
+          paginas: totalPaginas,
         });
-        row.height = 20;
 
+        row.height = 20;
+        row.eachCell((cell, colNum) => {
+          cell.font = { name: "Outfit", size: 10 };
+          cell.border = {
+            top: { style: "thin", color: { argb: "D9D9D9" } },
+            left: { style: "thin", color: { argb: "D9D9D9" } },
+            bottom: { style: "thin", color: { argb: "D9D9D9" } },
+            right: { style: "thin", color: { argb: "D9D9D9" } },
+          };
+
+          if (colNum === 3) {
+            cell.alignment = { vertical: "middle", horizontal: "left" };
+          } else {
+            cell.alignment = { vertical: "middle", horizontal: "center" };
+          }
+        });
         // Color por turno
         let colorHex = "F2F2F2";
-        const turnoLower = fila.turno.toLowerCase();
+        const turnoLower = item.turno.toLowerCase();
         if (turnoLower === "matutino") {
           colorHex = "FFF2CC"; // Amarillo pastel suave
         } else if (turnoLower === "vespertino") {
@@ -732,7 +700,7 @@ async function exportarExcelAuditoria(req, res) {
           colorHex = "DDEBF7"; // Azul pastel suave
         }
 
-        row.eachCell((cell) => {
+        row.eachCell((cell, colNum) => {
           cell.font = { name: "Inter", size: 10 };
           cell.fill = {
             type: "pattern",
@@ -745,17 +713,13 @@ async function exportarExcelAuditoria(req, res) {
             bottom: { style: "thin", color: { argb: "D9D9D9" } },
             right: { style: "thin", color: { argb: "D9D9D9" } },
           };
-          cell.alignment = { vertical: "middle", horizontal: "left" };
-        });
 
-        row.getCell("pdfs").alignment = {
-          vertical: "middle",
-          horizontal: "center",
-        };
-        row.getCell("paginas").alignment = {
-          vertical: "middle",
-          horizontal: "center",
-        };
+          if (colNum === 3) {
+            cell.alignment = { vertical: "middle", horizontal: "left" };
+          } else {
+            cell.alignment = { vertical: "middle", horizontal: "center" };
+          }
+        });
       });
     });
 
@@ -767,7 +731,8 @@ async function exportarExcelAuditoria(req, res) {
     const hora = String(ahora.getHours()).padStart(2, "0");
     const min = String(ahora.getMinutes()).padStart(2, "0");
     const seg = String(ahora.getSeconds()).padStart(2, "0");
-    let nombreArchivo = `Reporte_Diario_Auditoria_${anio}${mes}${dia}_${hora}${min}${seg}.xlsx`;
+    const idUnico = Date.now().toString().slice(-5);
+    let nombreArchivo = `Reporte_Diario_Auditoria_${anio}${mes}${dia}_${hora}${min}${seg}_${idUnico}.xlsx`;
 
     const carpetaDescargas = path.join(
       process.env.USERPROFILE || process.env.HOME || "C:\\",
@@ -784,16 +749,16 @@ async function exportarExcelAuditoria(req, res) {
       await workbook.xlsx.writeFile(rutaCompleta);
     }
 
-    // Abrir automáticamente el archivo
-    exec(`start "" "${rutaCompleta}"`, (err) => {
+    // Abrir automáticamente el archivo en Windows mediante cmd.exe o PowerShell
+    exec(`cmd.exe /c start "" "${rutaCompleta}"`, (err) => {
       if (err) {
-        console.error("Error al abrir Excel automáticamente:", err);
+        exec(`powershell.exe -Command "Start-Process '${rutaCompleta}'"`);
       }
     });
 
-    res.json({
+    return res.json({
       ok: true,
-      mensaje: "Reporte Excel generado y abierto con éxito.",
+      mensaje: "Reporte Excel generado y abierto correctamente.",
       ruta: rutaCompleta,
     });
   } catch (error) {

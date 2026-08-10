@@ -609,8 +609,14 @@ function establecerFechasPorDefecto() {
 
 // Consulta a la API local de Express y actualiza la interfaz
 async function consultarEstadisticas() {
-  const fechaInicio = document.getElementById("fechaInicio").value;
-  const fechaFin = document.getElementById("fechaFin").value;
+  let fechaInicio = document.getElementById("fechaInicio")?.value;
+  let fechaFin = document.getElementById("fechaFin")?.value;
+
+  if (!fechaInicio || !fechaFin) {
+    establecerFechasPorDefecto();
+    fechaInicio = document.getElementById("fechaInicio")?.value;
+    fechaFin = document.getElementById("fechaFin")?.value;
+  }
 
   try {
     const respuesta = await fetch(
@@ -1288,22 +1294,35 @@ function exportarRegistrosExcel() {
 
       const fechaInicio = inputInicio.value;
       const fechaFin = inputFin.value;
-
       const tipoReporte = btnTipo ? (btnTipo.getAttribute("data-valor") || "detallado") : "detallado";
 
-      cerrarModal();
+      const btnSubmit = form.querySelector("button[type='submit']");
+      if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.innerText = "Generando...";
+      }
 
       try {
         const url = `http://localhost:3000/api/estadisticas/exportar-excel?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}&tipo=${tipoReporte}`;
         const respuesta = await fetch(url);
-        const datos = await respuesta.json();
+        const datos = await respuesta.json().catch(() => ({}));
 
-        if (!datos.ok) {
-          alert("Error al generar Excel: " + datos.mensaje);
+        if (!respuesta.ok || !datos.ok) {
+          cerrarModal();
+          alert("⚠️ " + (datos.mensaje || "Error al generar el archivo Excel."));
+          return;
         }
+
+        cerrarModal();
       } catch (err) {
+        cerrarModal();
         console.error("Error al exportar Excel:", err);
-        alert("Error de conexión con el servidor al generar el reporte Excel.");
+        alert("❌ Error al comunicarse con el servidor local para generar el reporte Excel.");
+      } finally {
+        if (btnSubmit) {
+          btnSubmit.disabled = false;
+          btnSubmit.innerText = "Generar Excel";
+        }
       }
     });
   }
