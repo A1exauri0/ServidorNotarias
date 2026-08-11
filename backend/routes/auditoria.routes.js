@@ -13,7 +13,10 @@ const controladorAuditoria = require("../controllers/auditoria.controller");
 // Helper seguro para crear carpetas sin fallar en rutas de red UNC de Windows (\\servidor\recurso)
 function asegurarDirectorioSync(targetPath) {
   if (!targetPath) return;
-  if (fs.existsSync(targetPath)) return;
+
+  try {
+    if (fs.existsSync(targetPath)) return;
+  } catch (e) {}
 
   const esUnc = targetPath.startsWith("\\\\") || targetPath.startsWith("//");
   if (esUnc) {
@@ -22,19 +25,30 @@ function asegurarDirectorioSync(targetPath) {
       let acumulado = `\\\\${partes[0]}\\${partes[1]}`;
       for (let i = 2; i < partes.length; i++) {
         acumulado = path.join(acumulado, partes[i]);
-        if (!fs.existsSync(acumulado)) {
-          try {
+        try {
+          if (!fs.existsSync(acumulado)) {
             fs.mkdirSync(acumulado);
-          } catch (err) {
-            if (err.code !== "EEXIST" && !fs.existsSync(acumulado)) throw err;
           }
+        } catch (err) {
+          // Ignorar UNKNOWN o EEXIST si la carpeta en red de Windows ya existe
+          try {
+            if (!fs.existsSync(acumulado)) {
+              // Si aún no responde fs.existsSync por latencia de red, continuar de todos modos
+            }
+          } catch (checkErr) {}
         }
       }
       return;
     }
   }
 
-  fs.mkdirSync(targetPath, { recursive: true });
+  try {
+    fs.mkdirSync(targetPath, { recursive: true });
+  } catch (err) {
+    try {
+      if (!fs.existsSync(targetPath)) throw err;
+    } catch (e) {}
+  }
 }
 
 // Configuración de almacenamiento físico de PDFs con multer

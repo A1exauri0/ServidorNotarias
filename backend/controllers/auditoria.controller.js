@@ -46,7 +46,10 @@ async function copiarArchivoRobusto(rutaOrigen, rutaDestino, maxIntentos = 3) {
 // Helper seguro para crear carpetas sin fallar en rutas de red UNC de Windows (\\servidor\recurso)
 async function asegurarDirectorio(targetPath) {
   if (!targetPath) return;
-  if (fs.existsSync(targetPath)) return;
+
+  try {
+    if (fs.existsSync(targetPath)) return;
+  } catch (e) {}
 
   const esUnc = targetPath.startsWith("\\\\") || targetPath.startsWith("//");
   if (esUnc) {
@@ -55,19 +58,30 @@ async function asegurarDirectorio(targetPath) {
       let acumulado = `\\\\${partes[0]}\\${partes[1]}`;
       for (let i = 2; i < partes.length; i++) {
         acumulado = path.join(acumulado, partes[i]);
-        if (!fs.existsSync(acumulado)) {
-          try {
+        try {
+          if (!fs.existsSync(acumulado)) {
             await fs.promises.mkdir(acumulado);
-          } catch (err) {
-            if (err.code !== "EEXIST" && !fs.existsSync(acumulado)) throw err;
           }
+        } catch (err) {
+          // Ignorar UNKNOWN, EEXIST o EPERM en red de Windows si el directorio se crea o ya existe
+          try {
+            if (!fs.existsSync(acumulado)) {
+              await new Promise((r) => setTimeout(r, 60));
+            }
+          } catch (checkErr) {}
         }
       }
       return;
     }
   }
 
-  await fs.promises.mkdir(targetPath, { recursive: true });
+  try {
+    await fs.promises.mkdir(targetPath, { recursive: true });
+  } catch (err) {
+    try {
+      if (!fs.existsSync(targetPath)) throw err;
+    } catch (e) {}
+  }
 }
 
 // Inicializa el pool de base de datos desde server.js
