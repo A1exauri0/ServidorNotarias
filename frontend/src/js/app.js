@@ -766,7 +766,7 @@ function renderizarGraficaNotarias(datosCombinados, listaNotarias) {
   });
 }
 
-// Gráfica 2: Productividad (Páginas capturadas) por Turno en Gráfica de Puntos (Línea)
+// Gráfica 2: Productividad (Páginas capturadas) por fecha en Gráfica de Puntos (Línea)
 function renderizarGraficaTurnos(datosTurnos) {
   const canvas = document.getElementById("graficaProductividadTurno");
   if (!canvas) return;
@@ -783,75 +783,94 @@ function renderizarGraficaTurnos(datosTurnos) {
     }
   });
 
-  // 2. Agrupar datos por turno y fecha para fácil acceso
+  // 2. Agrupar datos por turno y fecha
   const mapaRendimiento = {};
   datosTurnos.forEach((item) => {
-    const t = (item.turno || "Matutino").toLowerCase().trim();
+    const t = (item.turno || "General").toLowerCase().trim();
     if (!mapaRendimiento[t]) mapaRendimiento[t] = {};
-    mapaRendimiento[t][item.fecha] = parseInt(item.total_imagenes || 0, 10);
+    mapaRendimiento[t][item.fecha] =
+      (mapaRendimiento[t][item.fecha] || 0) +
+      parseInt(item.total_imagenes || 0, 10);
   });
 
-  // 3. Crear datasets para cada turno
-  const datasetMatutino = [];
-  const datasetVespertino = [];
-  const datasetNocturno = [];
-
-  fechasBase.forEach((f) => {
-    datasetMatutino.push(mapaRendimiento["matutino"]?.[f] || 0);
-    datasetVespertino.push(mapaRendimiento["vespertino"]?.[f] || 0);
-    datasetNocturno.push(mapaRendimiento["nocturno"]?.[f] || 0);
-  });
-
-  if (instanciaGraficaPastel) {
-    instanciaGraficaPastel.destroy();
-  }
+  // 3. Crear datasets para los turnos existentes
+  const tieneGeneral = Object.keys(mapaRendimiento).includes("general");
+  const datasets = [];
 
   const esClaro = document.body.classList.contains("tema-claro");
   const colorTexto = esClaro ? "#17233d" : "#8d8d99";
   const colorCuadricula = esClaro ? "#d2dbe8" : "#24242b";
 
+  if (tieneGeneral) {
+    const dataGeneral = fechasBase.map(
+      (f) => mapaRendimiento["general"]?.[f] || 0,
+    );
+    datasets.push({
+      label: "Productividad General (Imágenes)",
+      data: dataGeneral,
+      borderColor: "#2ebd75", // Verde
+      backgroundColor: "rgba(46, 189, 117, 0.15)",
+      borderWidth: 2,
+      pointRadius: 6,
+      pointHoverRadius: 8,
+      pointBackgroundColor: "#2ebd75",
+      fill: true,
+      tension: 0.2,
+    });
+  } else {
+    const datasetMatutino = fechasBase.map(
+      (f) => mapaRendimiento["matutino"]?.[f] || 0,
+    );
+    const datasetVespertino = fechasBase.map(
+      (f) => mapaRendimiento["vespertino"]?.[f] || 0,
+    );
+    const datasetNocturno = fechasBase.map(
+      (f) => mapaRendimiento["nocturno"]?.[f] || 0,
+    );
+
+    datasets.push(
+      {
+        label: "Turno Matutino",
+        data: datasetMatutino,
+        borderColor: "#f5a623",
+        backgroundColor: "rgba(245, 166, 35, 0.15)",
+        borderWidth: 2,
+        pointRadius: 6,
+        fill: false,
+        tension: 0.1,
+      },
+      {
+        label: "Turno Vespertino",
+        data: datasetVespertino,
+        borderColor: "#2ebd75",
+        backgroundColor: "rgba(46, 189, 117, 0.15)",
+        borderWidth: 2,
+        pointRadius: 6,
+        fill: false,
+        tension: 0.1,
+      },
+      {
+        label: "Turno Nocturno",
+        data: datasetNocturno,
+        borderColor: "#3a6ac9",
+        backgroundColor: "rgba(58, 106, 201, 0.15)",
+        borderWidth: 2,
+        pointRadius: 6,
+        fill: false,
+        tension: 0.1,
+      },
+    );
+  }
+
+  if (instanciaGraficaPastel) {
+    instanciaGraficaPastel.destroy();
+  }
+
   instanciaGraficaPastel = new Chart(ctx, {
     type: "line",
     data: {
       labels: fechasLabels,
-      datasets: [
-        {
-          label: "Turno Matutino",
-          data: datasetMatutino,
-          borderColor: "#f5a623", // Ámbar
-          backgroundColor: "rgba(245, 166, 35, 0.15)",
-          borderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          pointBackgroundColor: "#f5a623",
-          fill: false,
-          tension: 0.1,
-        },
-        {
-          label: "Turno Vespertino",
-          data: datasetVespertino,
-          borderColor: "#2ebd75", // Verde
-          backgroundColor: "rgba(46, 189, 117, 0.15)",
-          borderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          pointBackgroundColor: "#2ebd75",
-          fill: false,
-          tension: 0.1,
-        },
-        {
-          label: "Turno Nocturno",
-          data: datasetNocturno,
-          borderColor: "#3a6ac9", // Azul
-          backgroundColor: "rgba(58, 106, 201, 0.15)",
-          borderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          pointBackgroundColor: "#3a6ac9",
-          fill: false,
-          tension: 0.1,
-        },
-      ],
+      datasets: datasets,
     },
     options: {
       responsive: true,
@@ -895,9 +914,15 @@ async function cargarTablaRegistros(resetPagina = false) {
     const btnNotaria = document.getElementById("btnFiltroNotaria");
     const btnVolumen = document.getElementById("btnFiltroVolumen");
 
-    const usuarioVal = btnUsuario ? btnUsuario.getAttribute("data-valor") || "" : "";
-    const notariaVal = btnNotaria ? btnNotaria.getAttribute("data-valor") || "" : "";
-    const volumenVal = btnVolumen ? btnVolumen.getAttribute("data-valor") || "" : "";
+    const usuarioVal = btnUsuario
+      ? btnUsuario.getAttribute("data-valor") || ""
+      : "";
+    const notariaVal = btnNotaria
+      ? btnNotaria.getAttribute("data-valor") || ""
+      : "";
+    const volumenVal = btnVolumen
+      ? btnVolumen.getAttribute("data-valor") || ""
+      : "";
 
     const params = new URLSearchParams();
     params.append("page", paginaActualRegistros);
@@ -955,7 +980,11 @@ async function cargarOpcionesFiltrosRegistros() {
       catalogosFiltrosCargados = true;
       poblarCustomSelect("Usuario", datos.usuarios || [], "Todos los Usuarios");
       poblarCustomSelect("Notaria", datos.notarias || [], "Todas las Notarías");
-      poblarCustomSelect("Volumen", datos.volumenes || [], "Todos los Volúmenes");
+      poblarCustomSelect(
+        "Volumen",
+        datos.volumenes || [],
+        "Todos los Volúmenes",
+      );
     }
   } catch (error) {
     console.error("Error al cargar opciones de filtros:", error);
@@ -998,7 +1027,9 @@ function poblarCustomSelect(idDropdown, opciones, textoDefecto) {
     btn.setAttribute("data-valor", nuevoValor);
     btn.innerText = opt.innerText;
 
-    optionsDiv.querySelectorAll(".custom-select-option").forEach((o) => o.classList.remove("seleccionado"));
+    optionsDiv
+      .querySelectorAll(".custom-select-option")
+      .forEach((o) => o.classList.remove("seleccionado"));
     opt.classList.add("seleccionado");
     wrapper.classList.remove("activo");
 
@@ -1020,7 +1051,8 @@ function actualizarInterfazPaginacion() {
   }
 
   if (infoTotal) {
-    const inicio = totalRegistrosGeneral === 0 ? 0 : (paginaActualRegistros - 1) * 100 + 1;
+    const inicio =
+      totalRegistrosGeneral === 0 ? 0 : (paginaActualRegistros - 1) * 100 + 1;
     const fin = Math.min(paginaActualRegistros * 100, totalRegistrosGeneral);
     infoTotal.textContent = `Mostrando ${inicio.toLocaleString()} - ${fin.toLocaleString()} de ${totalRegistrosGeneral.toLocaleString()} registros`;
   }
@@ -1047,7 +1079,9 @@ function conectarEventosRegistros() {
   const buscador = document.getElementById("buscadorRegistros");
   const tbody = document.getElementById("tablaRegistrosBody");
 
-  const modalEliminar = document.getElementById("modalConfirmarEliminarRegistro");
+  const modalEliminar = document.getElementById(
+    "modalConfirmarEliminarRegistro",
+  );
   const btnCerrarX = document.getElementById("btnCerrarModalEliminarRegX");
   const btnCancelar = document.getElementById("btnCancelarEliminarReg");
   const btnConfirmar = document.getElementById("btnConfirmarEliminarReg");
@@ -1080,16 +1114,22 @@ function conectarEventosRegistros() {
         btnConfirmar.disabled = true;
         btnConfirmar.innerHTML = `<iconify-icon icon="mdi:loading" class="spin"></iconify-icon> Eliminando...`;
 
-        const resp = await fetch(`http://localhost:3000/api/registros/${registroAEliminarId}`, {
-          method: "DELETE",
-        });
+        const resp = await fetch(
+          `http://localhost:3000/api/registros/${registroAEliminarId}`,
+          {
+            method: "DELETE",
+          },
+        );
         const resJson = await resp.json();
 
         if (resJson.ok) {
           cerrarModalEliminar();
           cargarTablaRegistros(false);
         } else {
-          alert("No se pudo eliminar el registro: " + (resJson.mensaje || "Error desconocido."));
+          alert(
+            "No se pudo eliminar el registro: " +
+              (resJson.mensaje || "Error desconocido."),
+          );
         }
       } catch (err) {
         alert("Error de conexión al eliminar el registro.");
@@ -1110,7 +1150,8 @@ function conectarEventosRegistros() {
       const archivo = btnEliminar.getAttribute("data-archivo");
 
       registroAEliminarId = id;
-      if (txtNombreArch) txtNombreArch.textContent = archivo || "Archivo sin nombre";
+      if (txtNombreArch)
+        txtNombreArch.textContent = archivo || "Archivo sin nombre";
       if (modalEliminar) {
         modalEliminar.style.display = "flex";
         modalEliminar.classList.add("activo");
@@ -1234,9 +1275,14 @@ function exportarRegistrosExcel() {
   const optionsTipo = document.getElementById("optionsExcelTipoReporte");
 
   if (btnTipo && wrapperTipo && optionsTipo) {
-    const seleccionadoOpt = optionsTipo.querySelector(".custom-select-option.seleccionado");
+    const seleccionadoOpt = optionsTipo.querySelector(
+      ".custom-select-option.seleccionado",
+    );
     if (seleccionadoOpt) {
-      btnTipo.setAttribute("data-valor", seleccionadoOpt.getAttribute("data-valor") || "detallado");
+      btnTipo.setAttribute(
+        "data-valor",
+        seleccionadoOpt.getAttribute("data-valor") || "detallado",
+      );
       btnTipo.innerText = seleccionadoOpt.innerText;
     }
 
@@ -1259,7 +1305,9 @@ function exportarRegistrosExcel() {
       btnTipo.setAttribute("data-valor", nuevoValor);
       btnTipo.innerText = opt.innerText;
 
-      optionsTipo.querySelectorAll(".custom-select-option").forEach((o) => o.classList.remove("seleccionado"));
+      optionsTipo
+        .querySelectorAll(".custom-select-option")
+        .forEach((o) => o.classList.remove("seleccionado"));
       opt.classList.add("seleccionado");
       wrapperTipo.classList.remove("activo");
     };
@@ -1294,7 +1342,9 @@ function exportarRegistrosExcel() {
 
       const fechaInicio = inputInicio.value;
       const fechaFin = inputFin.value;
-      const tipoReporte = btnTipo ? (btnTipo.getAttribute("data-valor") || "detallado") : "detallado";
+      const tipoReporte = btnTipo
+        ? btnTipo.getAttribute("data-valor") || "detallado"
+        : "detallado";
 
       const btnSubmit = form.querySelector("button[type='submit']");
       if (btnSubmit) {
@@ -1309,7 +1359,9 @@ function exportarRegistrosExcel() {
 
         if (!respuesta.ok || !datos.ok) {
           cerrarModal();
-          alert("⚠️ " + (datos.mensaje || "Error al generar el archivo Excel."));
+          alert(
+            "⚠️ " + (datos.mensaje || "Error al generar el archivo Excel."),
+          );
           return;
         }
 
@@ -1317,7 +1369,9 @@ function exportarRegistrosExcel() {
       } catch (err) {
         cerrarModal();
         console.error("Error al exportar Excel:", err);
-        alert("❌ Error al comunicarse con el servidor local para generar el reporte Excel.");
+        alert(
+          "❌ Error al comunicarse con el servidor local para generar el reporte Excel.",
+        );
       } finally {
         if (btnSubmit) {
           btnSubmit.disabled = false;
@@ -1328,7 +1382,7 @@ function exportarRegistrosExcel() {
   }
 }
 
-// Gráfica 3: PDFs procesados por Turno en Gráfica de Puntos (Línea)
+// Gráfica 3: PDFs procesados por fecha en Gráfica de Puntos (Línea)
 function renderizarGraficaTurnosPdfs(datosTurnos) {
   const canvas = document.getElementById("graficaProductividadTurnoPdfs");
   if (!canvas) return;
@@ -1345,75 +1399,94 @@ function renderizarGraficaTurnosPdfs(datosTurnos) {
     }
   });
 
-  // 2. Agrupar datos por turno y fecha para fácil acceso
+  // 2. Agrupar datos por turno y fecha
   const mapaRendimiento = {};
   datosTurnos.forEach((item) => {
-    const t = (item.turno || "Matutino").toLowerCase().trim();
+    const t = (item.turno || "General").toLowerCase().trim();
     if (!mapaRendimiento[t]) mapaRendimiento[t] = {};
-    mapaRendimiento[t][item.fecha] = parseInt(item.total_pdfs || 0, 10);
+    mapaRendimiento[t][item.fecha] =
+      (mapaRendimiento[t][item.fecha] || 0) +
+      parseInt(item.total_pdfs || 0, 10);
   });
 
-  // 3. Crear datasets para cada turno
-  const datasetMatutino = [];
-  const datasetVespertino = [];
-  const datasetNocturno = [];
-
-  fechasBase.forEach((f) => {
-    datasetMatutino.push(mapaRendimiento["matutino"]?.[f] || 0);
-    datasetVespertino.push(mapaRendimiento["vespertino"]?.[f] || 0);
-    datasetNocturno.push(mapaRendimiento["nocturno"]?.[f] || 0);
-  });
-
-  if (instanciaGraficaTurnosPdfs) {
-    instanciaGraficaTurnosPdfs.destroy();
-  }
+  // 3. Crear datasets para los turnos existentes
+  const tieneGeneral = Object.keys(mapaRendimiento).includes("general");
+  const datasets = [];
 
   const esClaro = document.body.classList.contains("tema-claro");
   const colorTexto = esClaro ? "#17233d" : "#8d8d99";
   const colorCuadricula = esClaro ? "#d2dbe8" : "#24242b";
 
+  if (tieneGeneral) {
+    const dataGeneral = fechasBase.map(
+      (f) => mapaRendimiento["general"]?.[f] || 0,
+    );
+    datasets.push({
+      label: "PDFs Procesados (General)",
+      data: dataGeneral,
+      borderColor: "#3a6ac9", // Azul
+      backgroundColor: "rgba(58, 106, 201, 0.15)",
+      borderWidth: 2,
+      pointRadius: 6,
+      pointHoverRadius: 8,
+      pointBackgroundColor: "#3a6ac9",
+      fill: true,
+      tension: 0.2,
+    });
+  } else {
+    const datasetMatutino = fechasBase.map(
+      (f) => mapaRendimiento["matutino"]?.[f] || 0,
+    );
+    const datasetVespertino = fechasBase.map(
+      (f) => mapaRendimiento["vespertino"]?.[f] || 0,
+    );
+    const datasetNocturno = fechasBase.map(
+      (f) => mapaRendimiento["nocturno"]?.[f] || 0,
+    );
+
+    datasets.push(
+      {
+        label: "Turno Matutino (PDFs)",
+        data: datasetMatutino,
+        borderColor: "#f5a623",
+        backgroundColor: "rgba(245, 166, 35, 0.15)",
+        borderWidth: 2,
+        pointRadius: 6,
+        fill: false,
+        tension: 0.1,
+      },
+      {
+        label: "Turno Vespertino (PDFs)",
+        data: datasetVespertino,
+        borderColor: "#2ebd75",
+        backgroundColor: "rgba(46, 189, 117, 0.15)",
+        borderWidth: 2,
+        pointRadius: 6,
+        fill: false,
+        tension: 0.1,
+      },
+      {
+        label: "Turno Nocturno (PDFs)",
+        data: datasetNocturno,
+        borderColor: "#3a6ac9",
+        backgroundColor: "rgba(58, 106, 201, 0.15)",
+        borderWidth: 2,
+        pointRadius: 6,
+        fill: false,
+        tension: 0.1,
+      },
+    );
+  }
+
+  if (instanciaGraficaTurnosPdfs) {
+    instanciaGraficaTurnosPdfs.destroy();
+  }
+
   instanciaGraficaTurnosPdfs = new Chart(ctx, {
     type: "line",
     data: {
       labels: fechasLabels,
-      datasets: [
-        {
-          label: "Turno Matutino (PDFs)",
-          data: datasetMatutino,
-          borderColor: "#f5a623", // Ámbar
-          backgroundColor: "rgba(245, 166, 35, 0.15)",
-          borderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          pointBackgroundColor: "#f5a623",
-          fill: false,
-          tension: 0.1,
-        },
-        {
-          label: "Turno Vespertino (PDFs)",
-          data: datasetVespertino,
-          borderColor: "#2ebd75", // Verde
-          backgroundColor: "rgba(46, 189, 117, 0.15)",
-          borderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          pointBackgroundColor: "#2ebd75",
-          fill: false,
-          tension: 0.1,
-        },
-        {
-          label: "Turno Nocturno (PDFs)",
-          data: datasetNocturno,
-          borderColor: "#3a6ac9", // Azul
-          backgroundColor: "rgba(58, 106, 201, 0.15)",
-          borderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          pointBackgroundColor: "#3a6ac9",
-          fill: false,
-          tension: 0.1,
-        },
-      ],
+      datasets: datasets,
     },
     options: {
       responsive: true,
@@ -1438,7 +1511,7 @@ function renderizarGraficaTurnosPdfs(datosTurnos) {
   });
 }
 
-// Gráficas de Pastel: Totales consolidados de PDFs e Imágenes por Turno
+// Gráficas de Pastel: Totales consolidados de PDFs e Imágenes
 function renderizarPastelesPorTurno(datosTurnos) {
   const canvasPdfs = document.getElementById("graficaPastelPdfsTurno");
   const canvasImg = document.getElementById("graficaPastelImagenesTurno");
@@ -1447,17 +1520,18 @@ function renderizarPastelesPorTurno(datosTurnos) {
   const ctxPdfs = canvasPdfs.getContext("2d");
   const ctxImg = canvasImg.getContext("2d");
 
-  // 1. Acumular totales por turno
   let totalPdfsMatutino = 0;
   let totalPdfsVespertino = 0;
   let totalPdfsNocturno = 0;
+  let totalPdfsGeneral = 0;
 
   let totalImgMatutino = 0;
   let totalImgVespertino = 0;
   let totalImgNocturno = 0;
+  let totalImgGeneral = 0;
 
   datosTurnos.forEach((item) => {
-    const t = (item.turno || "Matutino").toLowerCase().trim();
+    const t = (item.turno || "General").toLowerCase().trim();
     const pdfs = parseInt(item.total_pdfs || 0, 10);
     const img = parseInt(item.total_imagenes || 0, 10);
 
@@ -1470,6 +1544,9 @@ function renderizarPastelesPorTurno(datosTurnos) {
     } else if (t === "nocturno") {
       totalPdfsNocturno += pdfs;
       totalImgNocturno += img;
+    } else {
+      totalPdfsGeneral += pdfs;
+      totalImgGeneral += img;
     }
   });
 
@@ -1483,15 +1560,41 @@ function renderizarPastelesPorTurno(datosTurnos) {
   const esClaro = document.body.classList.contains("tema-claro");
   const colorTexto = esClaro ? "#17233d" : "#8d8d99";
 
-  const dataPdfs = [totalPdfsMatutino, totalPdfsVespertino, totalPdfsNocturno];
-  const dataImg = [totalImgMatutino, totalImgVespertino, totalImgNocturno];
-  const labels = ["Matutino", "Vespertino", "Nocturno"];
-  const colores = ["#f5a623", "#2ebd75", "#3a6ac9"];
+  let dataPdfs = [];
+  let dataImg = [];
+  let labels = [];
+  let colores = [];
 
-  // Configuración base común para las gráficas de pastel
+  if (
+    totalPdfsGeneral > 0 ||
+    (totalPdfsMatutino === 0 &&
+      totalPdfsVespertino === 0 &&
+      totalPdfsNocturno === 0)
+  ) {
+    const totalGralPdfs =
+      totalPdfsGeneral +
+      totalPdfsMatutino +
+      totalPdfsVespertino +
+      totalPdfsNocturno;
+    const totalGralImg =
+      totalImgGeneral +
+      totalImgMatutino +
+      totalImgVespertino +
+      totalImgNocturno;
+    dataPdfs = [totalGralPdfs];
+    dataImg = [totalGralImg];
+    labels = ["Jornada General"];
+    colores = ["#2ebd75"];
+  } else {
+    dataPdfs = [totalPdfsMatutino, totalPdfsVespertino, totalPdfsNocturno];
+    dataImg = [totalImgMatutino, totalImgVespertino, totalImgNocturno];
+    labels = ["Matutino", "Vespertino", "Nocturno"];
+    colores = ["#f5a623", "#2ebd75", "#3a6ac9"];
+  }
+
   const getConfigPastel = (ctx, titulo, datasetData) => {
     return new Chart(ctx, {
-      type: "doughnut", // Doughnut se ve más moderno y premium que Pie simple
+      type: "doughnut",
       data: {
         labels: labels,
         datasets: [

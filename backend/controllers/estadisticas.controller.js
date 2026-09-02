@@ -10,55 +10,27 @@ const { exec } = require("child_process");
 
 let dbPool = null;
 
-// Helper para calcular la fecha fiscal de jornada y el turno en base a los horarios locales y fines de semana
-function resolverFechaYTurnoDeJornada(fechaHoraStr, turnoOficial) {
-  let hora = 0;
-  let fechaJornada;
+// Helper para obtener la fecha natural del registro sin desplazamientos de horario y asignar turno único General
+function resolverFechaYTurnoDeJornada(fechaHoraStr) {
+  let fechaStr = "";
 
   if (fechaHoraStr instanceof Date) {
-    hora = fechaHoraStr.getHours();
-    fechaJornada = new Date(fechaHoraStr);
+    const a = fechaHoraStr.getFullYear();
+    const m = String(fechaHoraStr.getMonth() + 1).padStart(2, "0");
+    const d = String(fechaHoraStr.getDate()).padStart(2, "0");
+    fechaStr = `${a}-${m}-${d}`;
   } else if (typeof fechaHoraStr === "string") {
-    // Parsear fecha_hora en hora local sin alterar la zona horaria (evitando desfasar 6 horas con 'Z')
-    const partes = fechaHoraStr.split(" ");
-    const fechaPartes = partes[0].split("-");
-    const horaPartes = (partes[1] || "00:00:00").split(":");
-    const anio = parseInt(fechaPartes[0], 10);
-    const mes = parseInt(fechaPartes[1], 10) - 1;
-    const dia = parseInt(fechaPartes[2], 10);
-    hora = parseInt(horaPartes[0], 10);
-
-    fechaJornada = new Date(anio, mes, dia, hora, parseInt(horaPartes[1] || 0, 10), parseInt(horaPartes[2] || 0, 10));
+    // Parsear fecha natural YYYY-MM-DD
+    fechaStr = fechaHoraStr.slice(0, 10);
   } else {
     const d = new Date(fechaHoraStr);
-    hora = d.getHours();
-    fechaJornada = d;
+    const a = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dia = String(d.getDate()).padStart(2, "0");
+    fechaStr = `${a}-${m}-${dia}`;
   }
 
-  // Normalizar el turno asignado o heredado del usuario/registro
-  let turnoFinal = (turnoOficial || "Matutino").trim();
-  const turnoUpper = turnoFinal.toUpperCase();
-
-  if (turnoUpper === "NOCTURNO") {
-    turnoFinal = "Nocturno";
-    // Si la captura de nocturno ocurrió en la madrugada (00:00 a 05:59 AM), pertenece a la jornada de la noche anterior
-    if (hora >= 0 && hora < 6) {
-      fechaJornada.setDate(fechaJornada.getDate() - 1);
-    }
-  } else if (turnoUpper === "VESPERTINO") {
-    turnoFinal = "Vespertino";
-    // Matutino y Vespertino respetan la fecha natural exacta del día de la captura
-  } else {
-    turnoFinal = "Matutino";
-    // Matutino y Vespertino respetan la fecha natural exacta del día de la captura
-  }
-
-  const a = fechaJornada.getFullYear();
-  const m = String(fechaJornada.getMonth() + 1).padStart(2, "0");
-  const d = String(fechaJornada.getDate()).padStart(2, "0");
-  const fechaStr = `${a}-${m}-${d}`;
-
-  return { fechaStr, turno: turnoFinal };
+  return { fechaStr, turno: "General" };
 }
 
 // Inicializa el pool de base de datos desde server.js
@@ -321,27 +293,35 @@ async function exportarExcelAuditoria(req, res) {
       registrosPorFecha[fechaStr].push(reg);
     });
 
-    // 2. Deduplicar registros por archivo original por cada fecha (Lógica idéntica a la app C#)
+    // 2. Deduplicar registros por usuario, notaria, volumen y archivo original por cada fecha
     const registrosDeduplicados = [];
     Object.keys(registrosPorFecha).forEach((fechaStr) => {
       const grupoFecha = registrosPorFecha[fechaStr];
       const grupoArchivos = {};
 
       grupoFecha.forEach((reg) => {
-        const nombreArchivo = (reg.archivo || "Desconocido").toLowerCase();
-        if (!grupoArchivos[nombreArchivo]) {
-          grupoArchivos[nombreArchivo] = [];
+        const userNorm = (reg.usuario || "desconocido").toLowerCase().trim();
+        const notariaNorm = (reg.notaria || "desconocido").toLowerCase().trim();
+        const volNorm = (reg.volumen || "desconocido").toLowerCase().trim();
+        const archNorm = (reg.archivo || "desconocido").toLowerCase().trim();
+
+        const claveUnica = `${userNorm}_${notariaNorm}_${volNorm}_${archNorm}`;
+        if (!grupoArchivos[claveUnica]) {
+          grupoArchivos[claveUnica] = [];
         }
-        grupoArchivos[nombreArchivo].push(reg);
+        grupoArchivos[claveUnica].push(reg);
       });
 
-      Object.keys(grupoArchivos).forEach((nombreArchivo) => {
-        const grupo = grupoArchivos[nombreArchivo];
+      Object.keys(grupoArchivos).forEach((claveUnica) => {
+        const grupo = grupoArchivos[claveUnica];
         if (grupo.length === 1) {
           registrosDeduplicados.push(grupo[0]);
         } else {
           let seleccionado = null;
+          const regMuestra = grupo[0];
+          const nombreArchivo = (regMuestra.archivo || "").toLowerCase();
           const coincidenciaPc = nombreArchivo.match(/^pc(\d+)/i);
+
           if (coincidenciaPc) {
             const prefijoPC = coincidenciaPc[0].toUpperCase();
             seleccionado = grupo.find((r) => {
@@ -645,17 +625,9 @@ async function exportarExcelAuditoria(req, res) {
       });
       worksheet.getRow(1).height = 25;
 
-      // Filas consolidadas ordenadas estrictamente por Turno (Matutino -> Vespertino -> Nocturno) y Usuario
-      const ordenTurnos = { matutino: 1, vespertino: 2, nocturno: 3 };
+      // Filas consolidadas ordenadas alfabéticamente por Usuario
       const filasDeLaFecha = Object.values(registrosAgrupados[fecha]);
-      filasDeLaFecha.sort((a, b) => {
-        const tA = ordenTurnos[(a.turno || "").toLowerCase().trim()] || 4;
-        const tB = ordenTurnos[(b.turno || "").toLowerCase().trim()] || 4;
-        if (tA !== tB) {
-          return tA - tB; // 1. Matutino, 2. Vespertino, 3. Nocturno
-        }
-        return a.usuario.localeCompare(b.usuario);
-      });
+      filasDeLaFecha.sort((a, b) => a.usuario.localeCompare(b.usuario));
 
       filasDeLaFecha.forEach((item) => {
         const totalPdfs = item.registros.length;
@@ -668,44 +640,18 @@ async function exportarExcelAuditoria(req, res) {
           pc: item.pc,
           lugar: item.lugar,
           usuario: item.usuario,
-          turno: item.turno,
+          turno: "General",
           pdfs: totalPdfs,
           paginas: totalPaginas,
         });
 
         row.height = 20;
         row.eachCell((cell, colNum) => {
-          cell.font = { name: "Outfit", size: 10 };
-          cell.border = {
-            top: { style: "thin", color: { argb: "D9D9D9" } },
-            left: { style: "thin", color: { argb: "D9D9D9" } },
-            bottom: { style: "thin", color: { argb: "D9D9D9" } },
-            right: { style: "thin", color: { argb: "D9D9D9" } },
-          };
-
-          if (colNum === 3) {
-            cell.alignment = { vertical: "middle", horizontal: "left" };
-          } else {
-            cell.alignment = { vertical: "middle", horizontal: "center" };
-          }
-        });
-        // Color por turno
-        let colorHex = "F2F2F2";
-        const turnoLower = item.turno.toLowerCase();
-        if (turnoLower === "matutino") {
-          colorHex = "FFF2CC"; // Amarillo pastel suave
-        } else if (turnoLower === "vespertino") {
-          colorHex = "E2EFDA"; // Verde pastel suave
-        } else if (turnoLower === "nocturno") {
-          colorHex = "DDEBF7"; // Azul pastel suave
-        }
-
-        row.eachCell((cell, colNum) => {
           cell.font = { name: "Inter", size: 10 };
           cell.fill = {
             type: "pattern",
             pattern: "solid",
-            fgColor: { argb: colorHex },
+            fgColor: { argb: "FFFFFF" },
           };
           cell.border = {
             top: { style: "thin", color: { argb: "D9D9D9" } },
