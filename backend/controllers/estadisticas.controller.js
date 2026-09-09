@@ -238,12 +238,12 @@ async function exportarExcelAuditoria(req, res) {
     const fechaInicioCompleta = `${fecha_inicio} 00:00:00`;
     const fechaFinCompleta = `${fecha_fin} 23:59:59`;
 
-    // Consultar todos los registros en el rango estricto basándonos en fecha_hora
+    // Consultar todos los registros en el rango estricto basándonos en fecha de registro
     const [registros] = await dbPool.query(
       `
             SELECT 
                 a.id, 
-                DATE_FORMAT(a.fecha_hora, '%Y-%m-%d %H:%i:%s') AS fecha_hora, 
+                DATE_FORMAT(COALESCE(a.created_at, a.fecha_hora), '%Y-%m-%d %H:%i:%s') AS fecha_hora, 
                 a.created_at,
                 a.turno, 
                 u.turno AS turno_usuario,
@@ -259,7 +259,7 @@ async function exportarExcelAuditoria(req, res) {
                 a.lugar_trabajo 
             FROM \`auditoria\` a
             LEFT JOIN \`usuarios\` u ON LOWER(a.usuario) = LOWER(u.nombre_usuario)
-            WHERE a.fecha_hora >= ? AND a.fecha_hora <= ?
+            WHERE COALESCE(a.created_at, a.fecha_hora) >= ? AND COALESCE(a.created_at, a.fecha_hora) <= ?
               AND a.usuario IS NOT NULL AND a.usuario != '' AND a.usuario != 'Desconocido'
         `,
       [fechaInicioCompleta, fechaFinCompleta],
@@ -560,7 +560,7 @@ async function exportarExcelAuditoria(req, res) {
       });
     }
 
-    // 4. Agrupar por Fecha -> Usuario + PC + Turno (Para el formato Detallado por pestañas)
+    // 4. Agrupar por Fecha -> Usuario (Para el formato Detallado por pestañas)
     const registrosAgrupados = {};
     registrosDeduplicados.forEach((reg) => {
       const fecha = reg.fecha_calculada;
@@ -569,15 +569,12 @@ async function exportarExcelAuditoria(req, res) {
         registrosAgrupados[fecha] = {};
       }
 
-      const usuario = (reg.usuario || "Desconocido").toLowerCase().trim();
-      const pc = reg.pc || "Desconocido";
-      const turno = reg.turno_calculado || "Matutino";
+      const usuario = (reg.usuario || "Desconocido").trim();
+      const turno = "General";
 
-      const claveFila = `${usuario}_${pc.toLowerCase()}_${turno.toLowerCase()}`;
+      const claveFila = usuario.toLowerCase();
       if (!registrosAgrupados[fecha][claveFila]) {
         registrosAgrupados[fecha][claveFila] = {
-          pc: pc,
-          lugar: reg.lugar_trabajo || "IREC",
           usuario: usuario,
           turno: turno,
           registros: [],
@@ -599,12 +596,10 @@ async function exportarExcelAuditoria(req, res) {
 
       // Columnas y Cabeceras
       worksheet.columns = [
-        { header: "PC", key: "pc", width: 15 },
-        { header: "Lugar de Trabajo", key: "lugar", width: 22 },
-        { header: "Usuario", key: "usuario", width: 28 },
+        { header: "Capturista / Usuario", key: "usuario", width: 28 },
         { header: "Turno", key: "turno", width: 15 },
         { header: "Capturas (PDFs)", key: "pdfs", width: 18 },
-        { header: "Total de Imágenes", key: "paginas", width: 20 },
+        { header: "Total de Imágenes (Páginas)", key: "paginas", width: 25 },
       ];
 
       // Estilos para cabeceras
@@ -637,8 +632,6 @@ async function exportarExcelAuditoria(req, res) {
         );
 
         const row = worksheet.addRow({
-          pc: item.pc,
-          lugar: item.lugar,
           usuario: item.usuario,
           turno: "General",
           pdfs: totalPdfs,
@@ -660,7 +653,7 @@ async function exportarExcelAuditoria(req, res) {
             right: { style: "thin", color: { argb: "D9D9D9" } },
           };
 
-          if (colNum === 3) {
+          if (colNum === 1) {
             cell.alignment = { vertical: "middle", horizontal: "left" };
           } else {
             cell.alignment = { vertical: "middle", horizontal: "center" };

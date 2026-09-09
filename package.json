@@ -1,6 +1,6 @@
 {
   "name": "servidor-notarias",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "Servidor local y panel de administración en Electron y Express para auditorías de capturas",
   "main": "main.js",
   "scripts": {
@@ -32,6 +32,7 @@
   "build": {
     "appId": "com.irec.servidornotarias",
     "productName": "ServidorNotarias",
+    "compression": "maximum",
     "directories": {
       "output": "dist"
     },
@@ -44,13 +45,17 @@
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Servidor Notarías"
+      "shortcutName": "Servidor Notarías",
+      "differentialPackage": false
     },
     "files": [
       "backend/**/*",
       "frontend/**/*",
       "main.js",
-      "package.json"
+      "package.json",
+      "!**/*.map",
+      "!**/node_modules/*/{test,__tests__,tests,docs,coverage,example,examples}/*",
+      "!**/node_modules/*/*.md"
     ]
   }
 }
