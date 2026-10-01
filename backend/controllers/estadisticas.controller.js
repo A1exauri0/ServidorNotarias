@@ -483,13 +483,13 @@ async function exportarExcelAuditoria(req, res) {
         const row = worksheet.addRow(rowData);
         row.height = 20;
 
-        // Definir color de fondo según el turno
+        // Definir color de fondo según el turno (Verde Matutino, Amarillo Vespertino, Azul Nocturno)
         let colorHex = "F2F2F2";
         const turnoLower = fila.turno.toLowerCase();
         if (turnoLower === "matutino") {
-          colorHex = "FFF2CC"; // Amarillo pastel
-        } else if (turnoLower === "vespertino") {
           colorHex = "E2EFDA"; // Verde pastel
+        } else if (turnoLower === "vespertino") {
+          colorHex = "FFF2CC"; // Amarillo pastel
         } else if (turnoLower === "nocturno") {
           colorHex = "DDEBF7"; // Azul pastel
         }
@@ -560,7 +560,7 @@ async function exportarExcelAuditoria(req, res) {
       });
     }
 
-    // 4. Agrupar por Fecha -> Usuario (Para el formato Detallado por pestañas)
+    // 4. Agrupar por Fecha -> PC + Lugar + Usuario + Turno (Para el formato Detallado por pestañas)
     const registrosAgrupados = {};
     registrosDeduplicados.forEach((reg) => {
       const fecha = reg.fecha_calculada;
@@ -569,12 +569,16 @@ async function exportarExcelAuditoria(req, res) {
         registrosAgrupados[fecha] = {};
       }
 
+      const pc = reg.pc || "Desconocido";
+      const lugar = reg.lugar_trabajo || "5 de mayo - 1";
       const usuario = (reg.usuario || "Desconocido").trim();
-      const turno = "General";
+      const turno = reg.turno_usuario || reg.turno || reg.turno_calculado || "Matutino";
 
-      const claveFila = usuario.toLowerCase();
+      const claveFila = `${pc.toLowerCase()}_${lugar.toLowerCase()}_${usuario.toLowerCase()}_${turno.toLowerCase()}`;
       if (!registrosAgrupados[fecha][claveFila]) {
         registrosAgrupados[fecha][claveFila] = {
+          pc: pc,
+          lugar: lugar,
           usuario: usuario,
           turno: turno,
           registros: [],
@@ -596,10 +600,12 @@ async function exportarExcelAuditoria(req, res) {
 
       // Columnas y Cabeceras
       worksheet.columns = [
-        { header: "Capturista / Usuario", key: "usuario", width: 28 },
+        { header: "PC", key: "pc", width: 15 },
+        { header: "Lugar de Trabajo", key: "lugar", width: 22 },
+        { header: "Usuario", key: "usuario", width: 28 },
         { header: "Turno", key: "turno", width: 15 },
         { header: "Capturas (PDFs)", key: "pdfs", width: 18 },
-        { header: "Total de Imágenes (Páginas)", key: "paginas", width: 25 },
+        { header: "Total de Imágenes", key: "paginas", width: 20 },
       ];
 
       // Estilos para cabeceras
@@ -620,9 +626,17 @@ async function exportarExcelAuditoria(req, res) {
       });
       worksheet.getRow(1).height = 25;
 
-      // Filas consolidadas ordenadas alfabéticamente por Usuario
+      // Filas consolidadas ordenadas por Turno (Matutino -> Vespertino -> Nocturno) y Usuario
+      const ordenTurnos = { matutino: 1, vespertino: 2, nocturno: 3 };
       const filasDeLaFecha = Object.values(registrosAgrupados[fecha]);
-      filasDeLaFecha.sort((a, b) => a.usuario.localeCompare(b.usuario));
+      filasDeLaFecha.sort((a, b) => {
+        const ordenA = ordenTurnos[(a.turno || "").toLowerCase()] || 4;
+        const ordenB = ordenTurnos[(b.turno || "").toLowerCase()] || 4;
+        if (ordenA !== ordenB) {
+          return ordenA - ordenB;
+        }
+        return a.usuario.localeCompare(b.usuario);
+      });
 
       filasDeLaFecha.forEach((item) => {
         const totalPdfs = item.registros.length;
@@ -632,11 +646,24 @@ async function exportarExcelAuditoria(req, res) {
         );
 
         const row = worksheet.addRow({
+          pc: item.pc,
+          lugar: item.lugar,
           usuario: item.usuario,
-          turno: "General",
+          turno: item.turno,
           pdfs: totalPdfs,
           paginas: totalPaginas,
         });
+
+        // Definir color de fondo según el turno (Verde Matutino, Amarillo Vespertino, Azul Nocturno)
+        let colorHex = "FFFFFF";
+        const turnoLower = (item.turno || "").toLowerCase();
+        if (turnoLower === "matutino") {
+          colorHex = "E2EFDA"; // Verde pastel
+        } else if (turnoLower === "vespertino") {
+          colorHex = "FFF2CC"; // Amarillo pastel
+        } else if (turnoLower === "nocturno") {
+          colorHex = "DDEBF7"; // Azul pastel
+        }
 
         row.height = 20;
         row.eachCell((cell, colNum) => {
@@ -644,7 +671,7 @@ async function exportarExcelAuditoria(req, res) {
           cell.fill = {
             type: "pattern",
             pattern: "solid",
-            fgColor: { argb: "FFFFFF" },
+            fgColor: { argb: colorHex },
           };
           cell.border = {
             top: { style: "thin", color: { argb: "D9D9D9" } },
@@ -653,7 +680,7 @@ async function exportarExcelAuditoria(req, res) {
             right: { style: "thin", color: { argb: "D9D9D9" } },
           };
 
-          if (colNum === 1) {
+          if (colNum === 3) {
             cell.alignment = { vertical: "middle", horizontal: "left" };
           } else {
             cell.alignment = { vertical: "middle", horizontal: "center" };
